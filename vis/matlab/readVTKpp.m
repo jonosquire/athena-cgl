@@ -109,4 +109,17 @@ while s ~= -1
     for a=0:linesBetweenData;s=fgetl(fid); end
 end
 
+
+% Put velocity and magnetic field into form that matches hdf5 output
+if isfield(V,'vel')
+    V.vel1 = V.vel(1,:,:,:);
+    V.vel2 = V.vel(1,:,:,:);
+    V.vel3 = V.vel(1,:,:,:);
+end
+if isfield(V,'Bcc')
+    V.Bcc1 = V.Bcc(1,:,:,:);
+    V.Bcc2 = V.Bcc(1,:,:,:);
+    V.Bcc3 = V.Bcc(1,:,:,:);
+end
+    
 fclose(fid);

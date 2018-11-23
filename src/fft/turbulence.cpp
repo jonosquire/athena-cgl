@@ -40,6 +40,7 @@ TurbulenceDriver::TurbulenceDriver(Mesh *pm, ParameterInput *pin)
   expo = pin->GetOrAddReal("problem","expo",2); // power-law exponent
   dedt = pin->GetReal("problem","dedt"); // turbulence amplitude
   dtdrive = pin->GetReal("problem","dtdrive"); // driving interval
+  // Note that currently this does not allow time-correlated driving!
   tdrive = pm->time;
 
   if (pm->turb_flag == 0) {

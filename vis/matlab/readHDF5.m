@@ -1,8 +1,5 @@
 function V = readHDF5(hdf5file)
 
-
-hdf5file = '~/Desktop/cpaw.out2.00001.athdf';
-
 F=hdf5info(hdf5file);
 
 V.coord_sys = F.GroupHierarchy.Attributes(3).Value.Data;

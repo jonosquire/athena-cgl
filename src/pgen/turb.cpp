@@ -81,6 +81,24 @@ void MeshBlock::ProblemGenerator(ParameterInput *pin) {
       phydro->u(IEN,k,j,i) = 1.0;
     }
   }}}
+  
+  // Initialize mean magnetic field
+  // initialize interface B
+  for (int k=ks; k<=ke; k++) {
+  for (int j=js; j<=je; j++) {
+  for (int i=is; i<=ie+1; i++) {
+        pfield->b.x1f(k,j,i) = pin->GetOrAddReal("problem","B01",0.0);;
+  }}}
+  for (int k=ks; k<=ke; k++) {
+  for (int j=js; j<=je+1; j++) {
+  for (int i=is; i<=ie; i++) {
+        pfield->b.x2f(k,j,i) = pin->GetOrAddReal("problem","B02",0.0);;
+  }}}
+  for (int k=ks; k<=ke+1; k++) {
+  for (int j=js; j<=je; j++) {
+  for (int i=is; i<=ie; i++) {
+        pfield->b.x3f(k,j,i) = pin->GetOrAddReal("problem","B03",0.0);;
+  }}}
 }
 
 

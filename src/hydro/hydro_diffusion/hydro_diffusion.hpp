@@ -42,6 +42,7 @@ public:
   Real nu_iso, nu_aniso; // viscosity coeff
   AthenaArray<Real> visflx[3]; // viscous stress tensor
   AthenaArray<Real> nu; // viscosity array
+  bool mirror_limit, firehose_limit; // Only used if nu_aniso defined, limits fluxes
 
   Real kappa_iso, kappa_aniso; // thermal conduction coeff
   AthenaArray<Real> cndflx[3]; // thermal stress tensor
@@ -49,7 +50,8 @@ public:
 
   // functions
   void CalcHydroDiffusionFlux(const AthenaArray<Real> &p, const AthenaArray<Real> &c,
-                                    AthenaArray<Real> *flx);
+                                    AthenaArray<Real> *flx,
+                              const FaceField &b, const AthenaArray<Real> &bcc);
   void AddHydroDiffusionFlux(AthenaArray<Real> *flx_src, AthenaArray<Real> *flx_des);
   void AddHydroDiffusionEnergyFlux(AthenaArray<Real> *flux_src,
                                    AthenaArray<Real> *flux_des);
@@ -61,7 +63,8 @@ public:
   void ViscousFlux_iso(const AthenaArray<Real> &p,const AthenaArray<Real> &c,
                              AthenaArray<Real> *flx);
   void ViscousFlux_aniso(const AthenaArray<Real> &p,const AthenaArray<Real> &c,
-                               AthenaArray<Real> *flx);
+                               AthenaArray<Real> *flx,
+                         const FaceField &b, const AthenaArray<Real> &bcc);
 
   // thermal conduction
   void ThermalFlux_iso(const AthenaArray<Real> &p,const AthenaArray<Real> &c,

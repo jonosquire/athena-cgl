@@ -762,7 +762,7 @@
 			buildPhases = (
 			);
 			buildToolPath = /usr/bin/make;
-			buildWorkingDirectory = /Users/jsquire/Research/athena;
+			buildWorkingDirectory = /Users/jsquire/Research/athena/athena;
 			dependencies = (
 			);
 			name = "athena-dp";

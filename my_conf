@@ -1,1 +1,1 @@
-python configure.py --prob turb -mpi -hdf5 -fft --cxx clang++ --eos=isothermal 
+python configure.py --prob=turb -mpi -hdf5 -b -fft --cxx clang++ --eos=isothermal 

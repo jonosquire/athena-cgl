@@ -640,13 +640,14 @@ enum TaskStatus TimeIntegratorTaskList::HydroSourceTerms(MeshBlock *pmb, int sta
 
 enum TaskStatus TimeIntegratorTaskList::HydroDiffusion(MeshBlock *pmb, int stage) {
   Hydro *ph=pmb->phydro;
+  Field *pf=pmb->pfield; // Added J Squire -- necessary for anisotropic diffusion
 
 // return if there are no diffusion to be added
   if (ph->phdif->hydro_diffusion_defined == false) return TASK_NEXT;
 
   // *** this must be changed for the RK3 integrator
   if(stage <= nstages) {
-    ph->phdif->CalcHydroDiffusionFlux(ph->w, ph->u, ph->flux);
+    ph->phdif->CalcHydroDiffusionFlux(ph->w, ph->u, ph->flux, pf->b, pf->bcc);
   } else {
     return TASK_FAIL;
   }

@@ -7,14 +7,14 @@ names = strsplit(fulldata.textdata{2},'  ');
 names = names(1:end);
 
 
-nums = input(['Choose variables:  ' char(10) strjoin(names,char(10)) char(10)]);
-% hold on
+% nums = input(['Choose variables:  ' char(10) strjoin(names,char(10)) char(10)]);
+hold on
 dat = fulldata.data;
 inds = find_restart_ind(dat(:,1)); % Remove intermediate times between a restart
 t = dat(inds,1);
 
-
-semilogy(t,dat(inds,nums),'')
+kinetic_energy = dat(inds,7)+dat(inds,8)+dat(inds,9);
+semilogy(t,kinetic_energy,'')
 hold on 
 legend(names(nums))
 

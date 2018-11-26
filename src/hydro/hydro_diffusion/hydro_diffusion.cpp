@@ -8,6 +8,10 @@
 // C/C++ headers
 #include <algorithm>  // min()
 #include <cfloat>     // FLT_MAX
+#include <iostream>
+#include <sstream>    // sstream
+#include <stdexcept>  // runtime_error
+#include <string>     // c_str()
 
 // Athena++ headers
 #include "hydro_diffusion.hpp"
@@ -26,6 +30,7 @@ HydroDiffusion::HydroDiffusion(Hydro *phyd, ParameterInput *pin) {
   pmb_ = pmy_hydro_->pmy_block;
   pco_ = pmb_->pcoord;
   hydro_diffusion_defined = false;
+  std::stringstream msg;
 
   int ncells1 = pmb_->block_size.nx1 + 2*(NGHOST);
   int ncells2 = 1, ncells3 = 1;
@@ -35,7 +40,20 @@ HydroDiffusion::HydroDiffusion(Hydro *phyd, ParameterInput *pin) {
   // Check if viscous process.
   nu_iso = pin->GetOrAddReal("problem","nu_iso",0.0); // iso viscosity
   nu_aniso = pin->GetOrAddReal("problem","nu_aniso",0.0); // aniso viscosity
+  
   if (nu_iso > 0.0 || nu_aniso  > 0.0) {
+    if (nu_aniso > 0.0 && RELATIVISTIC_DYNAMICS) {
+      msg << "### FATAL ERROR in HydroDiffusion::HydroDiffusion" << std::endl
+      << "Anisotropic viscosity is not yet compatible with relativistic dynamics" << std::endl;
+      throw std::runtime_error(msg.str().c_str());
+      return;
+    }
+    if (nu_aniso > 0.0 && !MAGNETIC_FIELDS_ENABLED) {
+      msg << "### FATAL ERROR in HydroDiffusion::HydroDiffusion" << std::endl
+      << "Anisotropic viscosity requires magnetic fields" << std::endl;
+      throw std::runtime_error(msg.str().c_str());
+      return;
+    }
     hydro_diffusion_defined = true;
     // Allocate memory for fluxes.
     visflx[X1DIR].NewAthenaArray(NHYDRO,ncells3,ncells2,ncells1+1);
@@ -51,12 +69,19 @@ HydroDiffusion::HydroDiffusion(Hydro *phyd, ParameterInput *pin) {
     fy_.NewAthenaArray(ncells1);
     fz_.NewAthenaArray(ncells1);
     divv_.NewAthenaArray(ncells3,ncells2,ncells1);
+    
 
     nu.NewAthenaArray(2,ncells3,ncells2,ncells1);
     if(pmb_->pmy_mesh->ViscosityCoeff_==NULL)
       CalcViscCoeff_ = ConstViscosity;
     else
       CalcViscCoeff_ = pmb_->pmy_mesh->ViscosityCoeff_;
+    
+    // If anisotropic, check for mirror and firehose limits
+    if (nu_aniso > 0.0) {
+      mirror_limit = pin->GetOrAddBoolean("problem","mirror_limit", false);
+      firehose_limit = pin->GetOrAddBoolean("problem","firehose_limit", false);
+    }
   }
 
   // Check if thermal conduction.
@@ -123,7 +148,8 @@ HydroDiffusion::~HydroDiffusion() {
 //  \brief Calculate diffusion flux for hydro flux
 
 void HydroDiffusion::CalcHydroDiffusionFlux(const AthenaArray<Real> &prim,
-     const AthenaArray<Real> &cons, AthenaArray<Real> *flux) {
+    const AthenaArray<Real> &cons, AthenaArray<Real> *flux,
+    const FaceField &b, const AthenaArray<Real> &bcc) {
 
   Hydro *ph=pmb_->phydro;
   Field *pf=pmb_->pfield;
@@ -132,7 +158,7 @@ void HydroDiffusion::CalcHydroDiffusionFlux(const AthenaArray<Real> &prim,
 
   if (nu_iso > 0.0 || nu_aniso > 0.0) ClearHydroFlux(visflx);
   if (nu_iso > 0.0) ViscousFlux_iso(prim, cons, visflx);
-  if (nu_aniso > 0.0) ViscousFlux_aniso(prim, cons, visflx);
+  if (nu_aniso > 0.0) ViscousFlux_aniso(prim, cons, visflx, b, bcc);
 
   if (kappa_iso > 0.0 || kappa_aniso > 0.0) ClearHydroFlux(cndflx);
   if (kappa_iso > 0.0) ThermalFlux_iso(prim, cons, cndflx);

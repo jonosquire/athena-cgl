@@ -73,10 +73,12 @@ void Mesh::InitUserMeshData(ParameterInput *pin) {
   vflow = pin->GetOrAddReal("problem", "vflow", 0.0);
   ang_2 = pin->GetOrAddReal("problem", "ang_2", -999.9);
   ang_3 = pin->GetOrAddReal("problem", "ang_3", -999.9);
+  
+  int kn = pin->GetOrAddInteger("problem", "kn", 1); // Mode number in box
 
   ang_2_vert = pin->GetOrAddBoolean("problem", "ang_2_vert", false);
   ang_3_vert = pin->GetOrAddBoolean("problem", "ang_3_vert", false);
-
+  
   // initialize global variables
   if (NON_BAROTROPIC_EOS) {
     gam   = pin->GetReal("hydro", "gamma");
@@ -133,7 +135,8 @@ void Mesh::InitUserMeshData(ParameterInput *pin) {
     lambda = x3;
 
   // Initialize k_parallel
-  k_par = 2.0*(PI)/lambda;
+  k_par = 2.0*(PI)*kn/lambda;
+  std::cout << "Mode wavenumber is " << k_par << std::endl;
 
   // Compute eigenvectors, where the quantities u0 and bx0 are parallel to the
   // wavevector, and v0,w0,by0,bz0 are perpendicular.
@@ -142,9 +145,9 @@ void Mesh::InitUserMeshData(ParameterInput *pin) {
   u0 = vflow;
   Real v0 = 0.0;
   Real w0 = 0.0;
-  bx0 = 1.0;
-  by0 = std::sqrt(2.0);
-  bz0 = 0.5;
+  bx0 = pin->GetOrAddReal("problem", "bx0", 1.0);
+  by0 = pin->GetOrAddReal("problem", "by0", std::sqrt(2.0));
+  bz0 = pin->GetOrAddReal("problem", "bz0", 0.5);
   Real xfact = 0.0;
   Real yfact = 1.0;
   Real h0 = 0.0;
@@ -344,6 +347,7 @@ void MeshBlock::ProblemGenerator(ParameterInput *pin) {
   // Initialize the magnetic fields.  Note wavevector, eigenvectors, and other variables
   // are set in InitUserMeshData
 
+
   if (MAGNETIC_FIELDS_ENABLED) {
     AthenaArray<Real> a1,a2,a3;
     int nx1 = (ie-is)+1 + 2*(NGHOST);
@@ -495,7 +499,7 @@ static Real A1(const Real x1, const Real x2, const Real x3) {
   Real y = -x1*sin_a3        + x2*cos_a3;
   Real Ay =  bz0*x - (dbz/k_par)*cos(k_par*(x));
   Real Az = -by0*x + (dby/k_par)*cos(k_par*(x)) + bx0*y;
-
+  
   return -Ay*sin_a3 - Az*sin_a2*cos_a3;
 }
 

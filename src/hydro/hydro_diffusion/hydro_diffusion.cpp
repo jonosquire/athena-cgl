@@ -54,6 +54,12 @@ HydroDiffusion::HydroDiffusion(Hydro *phyd, ParameterInput *pin) {
       throw std::runtime_error(msg.str().c_str());
       return;
     }
+    if (nu_aniso > 0.0 && pmb_->block_size.nx3 == 1) {
+      msg << "### FATAL ERROR in HydroDiffusion::HydroDiffusion" << std::endl
+      << "Anisotropic viscosity not yet set up for 1D or 2D" << std::endl;
+      throw std::runtime_error(msg.str().c_str());
+      return;
+    }
     hydro_diffusion_defined = true;
     // Allocate memory for fluxes.
     visflx[X1DIR].NewAthenaArray(NHYDRO,ncells3,ncells2,ncells1+1);

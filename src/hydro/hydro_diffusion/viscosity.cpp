@@ -21,6 +21,8 @@
 static Real limiter2(const Real A, const Real B);
 static Real limiter4(const Real A, const Real B, const Real C, const Real D);
 static Real vanleer (const Real A, const Real B);
+static Real minmod  (const Real A, const Real B);
+
 
 //----------------------------------------------------------------------------------------
 //! \fn void HydroDiffusion::ViscousFlux_iso
@@ -491,13 +493,13 @@ void HydroDiffusion::ViscousFlux_aniso(const AthenaArray<Real> &prim,
   Real dx, dy, dz;
   Real dVxdx, dVydx, dVzdx, dVxdy, dVydy, dVzdy, dVxdz, dVydz, dVzdz;
   
-//  Divv(prim, divv_); Should compare this to using calculated dVdx etc.
+//  Divv(prim, divv_); // Should compare this to using calculated dVdx etc.
   
   // Calculate the flux across each face.
   // i-direction
-  if (pmb_->block_size.nx3 == 1) // 2D MHD limits
-    jl=js-1, ju=je+1, kl=ks, ku=ke;
-  else // 3D MHD limits
+//  if (pmb_->block_size.nx3 == 1) // 2D MHD limits
+//    jl=js-1, ju=je+1, kl=ks, ku=ke;
+//  else // 3D MHD limits
     jl=js-1, ju=je+1, kl=ks-1, ku=ke+1;
   
   for (int k=kl; k<=ku; ++k) {
@@ -509,54 +511,55 @@ void HydroDiffusion::ViscousFlux_aniso(const AthenaArray<Real> &prim,
         Bz = 0.5*(bcc(IB3,k,j,i) + bcc(IB3,k,j,i-1));
         B02 = Bx*Bx + By*By + Bz*Bz;
         B02 = MAX(B02,TINY_NUMBER);  // In case B02=0
-        dx = pco_->dx1v(i);
-        dy = 0.5*(pco_->dx2v(j+1) + pco_->dx2v(j));
-        dz = 0.5*(pco_->dx3v(k+1) + pco_->dx3v(k));
+        
+        dx = pco_->dx1v(i-1);
+        dy = 0.5*(pco_->dx2v(j-1) + pco_->dx2v(j));
+        dz = 0.5*(pco_->dx3v(k-1) + pco_->dx3v(k));
         
         // Gradient dVx/dx at i-1/2, j, k
-        dVxdx = (prim(IM1,k,j,i) - prim(IM1,k,j,i-1)) / pco_->dx1v(i);
+        dVxdx = (prim(IM1,k,j,i) - prim(IM1,k,j,i-1)) / dx;
         // Gradient dVy/dx at i-1/2, j, k
-        dVydx = (prim(IM2,k,j,i) - prim(IM2,k,j,i-1)) / pco_->dx1v(i);
+        dVydx = (prim(IM2,k,j,i) - prim(IM2,k,j,i-1)) / dx;
         // Gradient dVz/dx at i-1/2, j, k
-        dVzdx = (prim(IM3,k,j,i) - prim(IM3,k,j,i-1)) / pco_->dx1v(i);
+        dVzdx = (prim(IM3,k,j,i) - prim(IM3,k,j,i-1)) / dx;
         
         // Gradient dVx/dy at i-1/2, j, k
         dVxdy = limiter4(prim(IM1,k,j+1,i  ) - prim(IM1,k,j  ,i  ),
                          prim(IM1,k,j  ,i  ) - prim(IM1,k,j-1,i  ),
                          prim(IM1,k,j+1,i-1) - prim(IM1,k,j  ,i-1),
                          prim(IM1,k,j  ,i-1) - prim(IM1,k,j-1,i-1));
-        dVxdy /= 0.5*(pco_->dx2v(j+1) + pco_->dx2v(j));
+        dVxdy /= dy;
         // Gradient dVy/dy at i-1/2, j, k
         dVydy = limiter4(prim(IM2,k,j+1,i  ) - prim(IM2,k,j  ,i  ),
                          prim(IM2,k,j  ,i  ) - prim(IM2,k,j-1,i  ),
                          prim(IM2,k,j+1,i-1) - prim(IM2,k,j  ,i-1),
                          prim(IM2,k,j  ,i-1) - prim(IM2,k,j-1,i-1));
-        dVydy /= 0.5*(pco_->dx2v(j+1) + pco_->dx2v(j));
+        dVydy /= dy;
         // Gradient dVz/dy at i-1/2, j, k
         dVzdy = limiter4(prim(IM3,k,j+1,i  ) - prim(IM3,k,j  ,i  ),
                          prim(IM3,k,j  ,i  ) - prim(IM3,k,j-1,i  ),
                          prim(IM3,k,j+1,i-1) - prim(IM3,k,j  ,i-1),
                          prim(IM3,k,j  ,i-1) - prim(IM3,k,j-1,i-1));
-        dVzdy /= 0.5*(pco_->dx2v(j+1) + pco_->dx2v(j));
+        dVzdy /= dy;
         
         // Gradient dVx/dz at i-1/2, j, k
         dVxdz = limiter4(prim(IM1,k+1,j,i  ) - prim(IM1,k  ,j,i  ),
                          prim(IM1,k  ,j,i  ) - prim(IM1,k-1,j,i  ),
                          prim(IM1,k+1,j,i-1) - prim(IM1,k  ,j,i-1),
                          prim(IM1,k  ,j,i-1) - prim(IM1,k-1,j,i-1));
-        dVxdz /= 0.5*(pco_->dx3v(k+1) + pco_->dx3v(k));
+        dVxdz /=dz;
         // Gradient dVy/dz at i-1/2, j, k
         dVydz = limiter4(prim(IM2,k+1,j,i  ) - prim(IM2,k  ,j,i  ),
                          prim(IM2,k  ,j,i  ) - prim(IM2,k-1,j,i  ),
                          prim(IM2,k+1,j,i-1) - prim(IM2,k  ,j,i-1),
                          prim(IM2,k  ,j,i-1) - prim(IM2,k-1,j,i-1));
-        dVydz /= 0.5*(pco_->dx3v(k+1) + pco_->dx3v(k));
+        dVydz /=dz;
         // Gradient dVx/dz at i-1/2, j, k
         dVzdz = limiter4(prim(IM3,k+1,j,i  ) - prim(IM3,k  ,j,i  ),
                          prim(IM3,k  ,j,i  ) - prim(IM3,k-1,j,i  ),
                          prim(IM3,k+1,j,i-1) - prim(IM3,k  ,j,i-1),
                          prim(IM3,k  ,j,i-1) - prim(IM3,k-1,j,i-1));
-        dVzdz /= 0.5*(pco_->dx3v(k+1) + pco_->dx3v(k));
+        dVzdz /=dz;
         
         
         // Compute BB:GV
@@ -565,6 +568,7 @@ void HydroDiffusion::ViscousFlux_aniso(const AthenaArray<Real> &prim,
               Bz*(Bx*dVzdx + By*dVzdy + Bz*dVzdz);
         BBdV /= B02;
         
+        // NB: nu_aniso is a kinematic viscosity, since we multiply by density
         nu1  = 0.5*(nu(ANI,k,j,i)   + nu(ANI,k,j,i-1));
         denf = 0.5*(prim(IDN,k,j,i) + prim(IDN,k,j,i-1));
         
@@ -573,14 +577,14 @@ void HydroDiffusion::ViscousFlux_aniso(const AthenaArray<Real> &prim,
         // Apply mirror and/or firehose limiters
         if (mirror_limit && delta_p>0.5*B02)
           delta_p = 0.5*B02;
-        if (firehose_limit && delta_p<-B02)
-          delta_p = -B02;
+        if (firehose_limit && delta_p<-1.0*B02)
+          delta_p = -1.0*B02;
         
-        x1flux(IM1,k,j,i) += delta_p*(Bx*Bx/B02 - ONE_3RD);
-        x1flux(IM2,k,j,i) += delta_p*(Bx*By/B02);
-        x1flux(IM3,k,j,i) += delta_p*(Bx*Bz/B02);
+        // NB: Flux sign seems to be opposite to old athena
+        x1flux(IM1,k,j,i) += -delta_p*(Bx*Bx/B02 - ONE_3RD);
+        x1flux(IM2,k,j,i) += -delta_p*(Bx*By/B02);
+        x1flux(IM3,k,j,i) += -delta_p*(Bx*Bz/B02);
         
-//        std::cout << i << "," << j << "," << k << ": " <<  x1flux(IM1,k,j,i) << "," <<  x1flux(IM2,k,j,i) << "," <<  x1flux(IM3,k,j,i) << "\n";
         
         if (NON_BAROTROPIC_EOS)
           x1flux(IEN,k,j,i) +=
@@ -592,71 +596,75 @@ void HydroDiffusion::ViscousFlux_aniso(const AthenaArray<Real> &prim,
     }
   }
   
-  // j-direction
-  if (pmb_->block_size.nx3 == 1) // 2D MHD limits
-    il=is-1, iu=ie+1, kl=ks, ku=ke;
-  else // 3D MHD limits
+//  // j-direction
+//  if (pmb_->block_size.nx3 == 1) // 2D MHD limits
+//    il=is-1, iu=ie+1, kl=ks, ku=ke;
+//  else // 3D MHD limits
     il=is-1, iu=ie+1, kl=ks-1, ku=ke+1;
   
   for (int k=kl; k<=ku; ++k) {
     for (int j=js; j<=je+1; ++j) {
       // May want to add in simd directive here. Not sure if limiter4 functions will stuff it up
       for(int i=il; i<=iu; i++) {
-        Bx = 0.5*(bcc(IB2,k,j,i) + bcc(IB2,k,j-1,i));
+        Bx = 0.5*(bcc(IB1,k,j,i) + bcc(IB1,k,j-1,i));
         By = b.x2f(k,j,i);
         Bz = 0.5*(bcc(IB3,k,j,i) + bcc(IB3,k,j-1,i));
         B02 = Bx*Bx + By*By + Bz*Bz;
         B02 = MAX(B02,TINY_NUMBER);  // In case B02=0
-
+        
+        dx = 0.5*(pco_->dx1v(i-1) + pco_->dx1v(i));
+        dy = pco_->dx2v(j-1);
+        dz = 0.5*(pco_->dx3v(k-1) + pco_->dx3v(k));
+        
         // Gradient dVx/dx at i, j-1/2, k
         dVxdx = limiter4(prim(IM1,k,j  ,i+1) - prim(IM1,k,j  ,i  ),
                          prim(IM1,k,j  ,i  ) - prim(IM1,k,j  ,i-1),
                          prim(IM1,k,j-1,i+1) - prim(IM1,k,j-1,i  ),
                          prim(IM1,k,j-1,i  ) - prim(IM1,k,j-1,i-1));
-        dVxdx /= 0.5*(pco_->dx1v(i+1) + pco_->dx1v(i));
+        dVxdx /= dx;
         // Gradient dVx/dx at i, j-1/2, k
         dVydx = limiter4(prim(IM2,k,j  ,i+1) - prim(IM2,k,j  ,i  ),
                          prim(IM2,k,j  ,i  ) - prim(IM2,k,j  ,i-1),
                          prim(IM2,k,j-1,i+1) - prim(IM2,k,j-1,i  ),
                          prim(IM2,k,j-1,i  ) - prim(IM2,k,j-1,i-1));
-        dVydx /= 0.5*(pco_->dx1v(i+1) + pco_->dx1v(i));
+        dVydx /= dx;
         // Gradient dVx/dx at i, j-1/2, k
         dVzdx = limiter4(prim(IM3,k,j  ,i+1) - prim(IM3,k,j  ,i  ),
                          prim(IM3,k,j  ,i  ) - prim(IM3,k,j  ,i-1),
                          prim(IM3,k,j-1,i+1) - prim(IM3,k,j-1,i  ),
                          prim(IM3,k,j-1,i  ) - prim(IM3,k,j-1,i-1));
-        dVzdx /= 0.5*(pco_->dx1v(i+1) + pco_->dx1v(i));
+        dVzdx /= dx;
         
         // Gradient dVx/dy at i, j-1/2, k
-        dVxdy = (prim(IM1,k,j,i) - prim(IM1,k,j-1,i)) / pco_->dx2v(j);
+        dVxdy = (prim(IM1,k,j,i) - prim(IM1,k,j-1,i)) / dy;
         // Gradient dVx/dy at i, j-1/2, k
-        dVydy = (prim(IM2,k,j,i) - prim(IM2,k,j-1,i)) / pco_->dx2v(j);
+        dVydy = (prim(IM2,k,j,i) - prim(IM2,k,j-1,i)) / dy;
         // Gradient dVx/dy at i, j-1/2, k
-        dVzdy = (prim(IM3,k,j,i) - prim(IM3,k,j-1,i)) / pco_->dx2v(j);
+        dVzdy = (prim(IM3,k,j,i) - prim(IM3,k,j-1,i)) / dy;
         
         // Gradient dVx/dz at i, j-1/2, k
         dVxdz = limiter4(prim(IM1,k+1,j  ,i) - prim(IM1,k  ,j  ,i),
                          prim(IM1,k  ,j  ,i) - prim(IM1,k-1,j  ,i),
                          prim(IM1,k+1,j-1,i) - prim(IM1,k  ,j-1,i),
                          prim(IM1,k  ,j-1,i) - prim(IM1,k-1,j-1,i));
-        dVxdz /= 0.5*(pco_->dx3v(k+1) + pco_->dx3v(k));
+        dVxdz /= dz;
         // Gradient dVx/dz at i, j-1/2, k
         dVydz = limiter4(prim(IM2,k+1,j  ,i) - prim(IM2,k  ,j  ,i),
                          prim(IM2,k  ,j  ,i) - prim(IM2,k-1,j  ,i),
                          prim(IM2,k+1,j-1,i) - prim(IM2,k  ,j-1,i),
                          prim(IM2,k  ,j-1,i) - prim(IM2,k-1,j-1,i));
-        dVydz /= 0.5*(pco_->dx3v(k+1) + pco_->dx3v(k));
+        dVydz /= dz;
         // Gradient dVx/dz at i, j-1/2, k
         dVzdz = limiter4(prim(IM3,k+1,j  ,i) - prim(IM3,k  ,j  ,i),
                          prim(IM3,k  ,j  ,i) - prim(IM3,k-1,j  ,i),
                          prim(IM3,k+1,j-1,i) - prim(IM3,k  ,j-1,i),
                          prim(IM3,k  ,j-1,i) - prim(IM3,k-1,j-1,i));
-        dVzdz /= 0.5*(pco_->dx3v(k+1) + pco_->dx3v(k));
+        dVzdz /= dz;
         
         // Compute BB:GV
         BBdV = Bx*(Bx*dVxdx + By*dVxdy + Bz*dVxdz) +
-        By*(Bx*dVydx + By*dVydy + Bz*dVydz) +
-        Bz*(Bx*dVzdx + By*dVzdy + Bz*dVzdz);
+              By*(Bx*dVydx + By*dVydy + Bz*dVydz) +
+              Bz*(Bx*dVzdx + By*dVzdy + Bz*dVzdz);
         BBdV /= B02;
         
         nu1  = 0.5*(nu(ANI,k,j,i)   + nu(ANI,k,j-1,i));
@@ -667,15 +675,15 @@ void HydroDiffusion::ViscousFlux_aniso(const AthenaArray<Real> &prim,
         // Apply mirror and/or firehose limiters
         if (mirror_limit && delta_p>0.5*B02)
           delta_p = 0.5*B02;
-        if (firehose_limit && delta_p<-B02)
-          delta_p = -B02;
-        
-        x2flux(IM1,k,j,i) += delta_p*(By*Bx/B02);
-        x2flux(IM2,k,j,i) += delta_p*(By*By/B02 - ONE_3RD);
-        x2flux(IM3,k,j,i) += delta_p*(By*Bz/B02);
+        if (firehose_limit && delta_p<-1.0*B02)
+          delta_p = -1.0*B02;
+                
+        x2flux(IM1,k,j,i) += -delta_p*(By*Bx/B02);
+        x2flux(IM2,k,j,i) += -delta_p*(By*By/B02 - ONE_3RD);
+        x2flux(IM3,k,j,i) += -delta_p*(By*Bz/B02);
         
         if (NON_BAROTROPIC_EOS)
-          x1flux(IEN,k,j,i) +=
+          x2flux(IEN,k,j,i) +=
           0.5*((prim(IM1,k,j,i) + prim(IM1,k,j-1,i))*x2flux(IM1,k,j,i) +
                (prim(IM2,k,j,i) + prim(IM2,k,j-1,i))*x2flux(IM2,k,j,i) +
                (prim(IM3,k,j,i) + prim(IM3,k,j-1,i))*x2flux(IM3,k,j,i));
@@ -691,61 +699,65 @@ void HydroDiffusion::ViscousFlux_aniso(const AthenaArray<Real> &prim,
     for (int j=jl; j<=ju; ++j) {
       // May want to add in simd directive here. Not sure if limiter4 functions will stuff it up
       for(int i=il; i<=iu; i++) {
-        Bx = 0.5*(bcc(IB2,k,j,i) + bcc(IB2,k,j-1,i));
-        By = 0.5*(bcc(IB2,k,j,i) + bcc(IB2,k,j,i-1));
+        Bx = 0.5*(bcc(IB1,k,j,i) + bcc(IB1,k-1,j,i));
+        By = 0.5*(bcc(IB2,k,j,i) + bcc(IB2,k-1,j,i));
         Bz = b.x3f(k,j,i);
         B02 = Bx*Bx + By*By + Bz*Bz;
         B02 = MAX(B02,TINY_NUMBER);  // In case B02=0
+        
+        dx = 0.5*(pco_->dx1v(i-1) + pco_->dx1v(i));
+        dy = 0.5*(pco_->dx2v(j-1) + pco_->dx2v(j));
+        dz = pco_->dx3v(k-1);
         
         // Gradient dVx/dx at i, j, k-1/2
         dVxdx = limiter4(prim(IM1,k  ,j,i+1) - prim(IM1,k  ,j,i  ),
                          prim(IM1,k  ,j,i  ) - prim(IM1,k  ,j,i-1),
                          prim(IM1,k-1,j,i+1) - prim(IM1,k-1,j,i  ),
                          prim(IM1,k-1,j,i  ) - prim(IM1,k-1,j,i-1));
-        dVxdx /= 0.5*(pco_->dx1v(i+1) + pco_->dx1v(i));
+        dVxdx /= dx;
         /// Gradient dVz/dx at i, j, k-1/2
         dVydx = limiter4(prim(IM2,k  ,j,i+1) - prim(IM2,k  ,j,i  ),
                          prim(IM2,k  ,j,i  ) - prim(IM2,k  ,j,i-1),
                          prim(IM2,k-1,j,i+1) - prim(IM2,k-1,j,i  ),
                          prim(IM2,k-1,j,i  ) - prim(IM2,k-1,j,i-1));
-        dVydx /= 0.5*(pco_->dx1v(i+1) + pco_->dx1v(i));
+        dVydx /= dx;
         // Gradient dVz/dx at i, j, k-1/2
         dVzdx = limiter4(prim(IM3,k  ,j,i+1) - prim(IM3,k  ,j,i  ),
                          prim(IM3,k  ,j,i  ) - prim(IM3,k  ,j,i-1),
                          prim(IM3,k-1,j,i+1) - prim(IM3,k-1,j,i  ),
                          prim(IM3,k-1,j,i  ) - prim(IM3,k-1,j,i-1));
-        dVzdx /= 0.5*(pco_->dx1v(i+1) + pco_->dx1v(i));
+        dVzdx /= dx;
         
         // Gradient dVx/dy at i, j, k-1/2
         dVxdy = limiter4(prim(IM1,k  ,j+1,i) - prim(IM1,k  ,j  ,i),
                          prim(IM1,k  ,j  ,i) - prim(IM1,k  ,j-1,i),
                          prim(IM1,k-1,j+1,i) - prim(IM1,k-1,j  ,i),
                          prim(IM1,k-1,j  ,i) - prim(IM1,k-1,j-1,i));
-        dVxdy /= 0.5*(pco_->dx2v(j+1) + pco_->dx2v(j));
+        dVxdy /= dy;
         // Gradient dVx/dy at i, j, k-1/2
         dVydy = limiter4(prim(IM2,k  ,j+1,i) - prim(IM2,k  ,j  ,i),
                          prim(IM2,k  ,j  ,i) - prim(IM2,k  ,j-1,i),
                          prim(IM2,k-1,j+1,i) - prim(IM2,k-1,j  ,i),
                          prim(IM2,k-1,j  ,i) - prim(IM2,k-1,j-1,i));
-        dVydy /= 0.5*(pco_->dx2v(j+1) + pco_->dx2v(j));
+        dVydy /= dy;
         // Gradient dVx/dy at i, j, k-1/2
         dVzdy = limiter4(prim(IM3,k  ,j+1,i) - prim(IM3,k  ,j  ,i),
                          prim(IM3,k  ,j  ,i) - prim(IM3,k  ,j-1,i),
                          prim(IM3,k-1,j+1,i) - prim(IM3,k-1,j  ,i),
                          prim(IM3,k-1,j  ,i) - prim(IM3,k-1,j-1,i));
-        dVzdy /= 0.5*(pco_->dx2v(j+1) + pco_->dx2v(j));
+        dVzdy /= dy;
         
         // Gradient dVx/dz at i, j, k-1/2
-        dVxdz = (prim(IM1,k,j,i) - prim(IM1,k-1,j,i)) / pco_->dx3v(k);
+        dVxdz = (prim(IM1,k,j,i) - prim(IM1,k-1,j,i)) / dz;
         // Gradient dVy/dz at i, j, k-1/2
-        dVydz = (prim(IM2,k,j,i) - prim(IM2,k-1,j,i)) / pco_->dx3v(k);
+        dVydz = (prim(IM2,k,j,i) - prim(IM2,k-1,j,i)) / dz;
         // Gradient dVz/dz at i, j, k-1/2
-        dVzdz = (prim(IM3,k,j,i) - prim(IM3,k-1,j,i)) / pco_->dx3v(k);
+        dVzdz = (prim(IM3,k,j,i) - prim(IM3,k-1,j,i)) / dz;
         
         // Compute BB:GV
         BBdV = Bx*(Bx*dVxdx + By*dVxdy + Bz*dVxdz) +
-        By*(Bx*dVydx + By*dVydy + Bz*dVydz) +
-        Bz*(Bx*dVzdx + By*dVzdy + Bz*dVzdz);
+              By*(Bx*dVydx + By*dVydy + Bz*dVydz) +
+              Bz*(Bx*dVzdx + By*dVzdy + Bz*dVzdz);
         BBdV /= B02;
         
         nu1  = 0.5*(nu(ANI,k,j,i)   + nu(ANI,k-1,j,i));
@@ -756,18 +768,18 @@ void HydroDiffusion::ViscousFlux_aniso(const AthenaArray<Real> &prim,
         // Apply mirror and/or firehose limiters
         if (mirror_limit && delta_p>0.5*B02)
           delta_p = 0.5*B02;
-        if (firehose_limit && delta_p<-B02)
-          delta_p = -B02;
+        if (firehose_limit && delta_p<-1.0*B02)
+          delta_p = -1.0*B02;
         
-        x3flux(IM1,k,j,i) += delta_p*(Bz*Bx/B02);
-        x3flux(IM2,k,j,i) += delta_p*(Bz*By/B02);
-        x3flux(IM3,k,j,i) += delta_p*(Bz*Bz/B02 - ONE_3RD);
+        x3flux(IM1,k,j,i) += -delta_p*(Bz*Bx/B02);
+        x3flux(IM2,k,j,i) += -delta_p*(Bz*By/B02);
+        x3flux(IM3,k,j,i) += -delta_p*(Bz*Bz/B02 - ONE_3RD);
         
         if (NON_BAROTROPIC_EOS)
-          x1flux(IEN,k,j,i) +=
-          0.5*((prim(IM1,k,j,i) + prim(IM1,k-1,j,i))*x1flux(IM1,k,j,i) +
-               (prim(IM2,k,j,i) + prim(IM2,k-1,j,i))*x1flux(IM2,k,j,i) +
-               (prim(IM3,k,j,i) + prim(IM3,k-1,j,i))*x1flux(IM3,k,j,i));
+          x3flux(IEN,k,j,i) +=
+          0.5*((prim(IM1,k,j,i) + prim(IM1,k-1,j,i))*x3flux(IM1,k,j,i) +
+               (prim(IM2,k,j,i) + prim(IM2,k-1,j,i))*x3flux(IM2,k,j,i) +
+               (prim(IM3,k,j,i) + prim(IM3,k-1,j,i))*x3flux(IM3,k,j,i));
         
       }
     }
@@ -810,8 +822,11 @@ void ConstViscosity(HydroDiffusion *phdif, MeshBlock *pmb, const AthenaArray<Rea
 
 static Real limiter2(const Real A, const Real B)
 {
-  /* van Leer slope limiter */
+  // van Leer slope limiter
   return vanleer(A,B);
+  
+  // monotonized central (MC) limiter
+//  return minmod(2.0*minmod(A,B),0.5*(A+B));
 }
 
 static Real limiter4(const Real A, const Real B, const Real C, const Real D)
@@ -829,5 +844,20 @@ static Real vanleer(const Real A, const Real B)
     return 0.0;
   }
 }
+
+static Real minmod(const Real A, const Real B)
+{
+  if (A*B > 0) {
+    if (A > 0) {
+      return MIN(A,B);
+    } else {
+      return MAX(A,B);
+    }
+  } else {
+    return 0.0;
+  }
+}
+
+
 
 

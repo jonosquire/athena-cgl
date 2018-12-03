@@ -39,10 +39,11 @@ public:
 
   // data
   bool hydro_diffusion_defined;
-  Real nu_iso, nu_aniso; // viscosity coeff
+  Real nu_iso, nu_aniso; // kinetmatic viscosity coeffs
   AthenaArray<Real> visflx[3]; // viscous stress tensor
   AthenaArray<Real> nu; // viscosity array
   bool mirror_limit, firehose_limit; // Only used if nu_aniso defined, limits fluxes
+  // As defined Dp = nu_aniso*rho*(BBdV - 1/3*div(V))
 
   Real kappa_iso, kappa_aniso; // thermal conduction coeff
   AthenaArray<Real> cndflx[3]; // thermal stress tensor

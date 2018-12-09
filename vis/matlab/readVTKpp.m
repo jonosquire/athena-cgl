@@ -106,20 +106,23 @@ while s ~= -1
     Q = fread(fid,ncmpt*n2read,'*single');
     V = setfield(V,varname,reshape(Q,[ncmpt szr ]));
 
+    V.(varname) = squeeze(V.(varname));
+
     for a=0:linesBetweenData;s=fgetl(fid); end
 end
 
 
 % Put velocity and magnetic field into form that matches hdf5 output
 if isfield(V,'vel')
-    V.vel1 = V.vel(1,:,:,:);
-    V.vel2 = V.vel(1,:,:,:);
-    V.vel3 = V.vel(1,:,:,:);
+    V.vel1 = squeeze(V.vel(1,:,:,:));
+    V.vel2 = squeeze(V.vel(2,:,:,:));
+    V.vel3 = squeeze(V.vel(3,:,:,:));
 end
 if isfield(V,'Bcc')
-    V.Bcc1 = V.Bcc(1,:,:,:);
-    V.Bcc2 = V.Bcc(1,:,:,:);
-    V.Bcc3 = V.Bcc(1,:,:,:);
+    V.Bcc1 = squeeze(V.Bcc(1,:,:,:));
+    V.Bcc2 = squeeze(V.Bcc(2,:,:,:));
+    V.Bcc3 = squeeze(V.Bcc(3,:,:,:));
 end
+
     
 fclose(fid);

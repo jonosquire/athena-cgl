@@ -105,12 +105,14 @@ typedef struct EdgeField {
 //----------------------------------------------------------------------------------------
 // enums used everywhere
 
-// array indices for conserved: density, momemtum, total energy, face-centered field
-enum {IDN=0, IM1=1, IM2=2, IM3=3, IEN=4};
+// array indices for conserved: density, momemtum, total energy, mu=Pp/B (in cgl),
+// face-centered field
+enum {IDN=0, IM1=1, IM2=2, IM3=3, IEN=4, IMU=5};
 enum {IB1=0, IB2=1, IB3=2};
 
-// array indices for 1D primitives: velocity, transverse components of field
-enum {IVX=1, IVY=2, IVZ=3, IPR=4, IBY=(NHYDRO), IBZ=((NHYDRO)+1)};
+// array indices for 1D primitives: velocity, (parallel) pressure, perpendicular pressure
+// transverse components of field
+enum {IVX=1, IVY=2, IVZ=3, IPR=4, IPP=5, IBY=(NHYDRO), IBZ=((NHYDRO)+1)};
 
 // array indices for face-centered electric fields returned by Riemann solver
 enum {X1E2=0, X1E3=1, X2E3=0, X2E1=1, X3E1=0, X3E2=1};

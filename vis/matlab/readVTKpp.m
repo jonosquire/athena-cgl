@@ -24,7 +24,9 @@ if( fid == -1 )
 end
 
 fgetl(fid); % # vtk DataFile Version x.x
-fgetl(fid); % comments
+s = fgetl(fid); %  Athena++ data at time=1.200042e+03  cycle=16959  variables=hybrid
+time =  sscanf(s, '# Athena++ data at time=%f  cycle=%d  variables=prim').';
+V.t = time(1); V.ncycle = time(2);
 fgetl(fid); % BINARY
 fgetl(fid); % DATASET RECTILINEAR_GRID
 
@@ -80,6 +82,7 @@ fgetl(fid); % LOOKUP_TABLE default
 Q = fread(fid,n2read,'*single');
 disp(['Adding ' varname])
 V = setfield(V,varname,reshape(Q,[1 sz ]));
+V.(varname) = squeeze(V.(varname));
 
 %Let's now fight with the FIELD region for the other components.
 linesBetweenData = 1;

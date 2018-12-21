@@ -42,7 +42,7 @@ public:
     Real SoundSpeed(const Real prim[(NHYDRO)]);
     #if !MAGNETIC_FIELDS_ENABLED  // hydro: MHD defined as no-op
       Real FastMagnetosonicSpeed(const Real[], const Real) {return 0.0;}
-    #else  // MHD
+    #else  // MHD or CGL
 #pragma omp declare simd simdlen(SIMD_WIDTH) uniform(this)
       Real FastMagnetosonicSpeed(const Real prim[(NWAVE)], const Real bx);
     #endif  // !MAGNETIC_FIELDS_ENABLED
@@ -104,11 +104,13 @@ public:
   Real GetIsoSoundSpeed() const {return iso_sound_speed_;}
   Real GetDensityFloor() const {return density_floor_;}
   Real GetPressureFloor() const {return pressure_floor_;}
+  Real GetBFieldFloor() const {return magnetic_mag_floor_;}
 
 private:
   MeshBlock *pmy_block_;                 // ptr to MeshBlock containing this EOS
   Real iso_sound_speed_, gamma_;         // isothermal Cs, ratio of specific heats
   Real density_floor_, pressure_floor_;  // density and pressure floors
+  Real magnetic_mag_floor_;              // Magnetic field strength floor
   Real sigma_max_, beta_min_;            // limits on ratios of gas quantities to pmag
   Real gamma_max_;                       // maximum Lorentz factor
   Real rho_min_, rho_pow_;               // variables to control power-law denity floor

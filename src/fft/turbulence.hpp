@@ -36,6 +36,7 @@ public:
 private:
   int64_t rseed;
   int nlow,nhigh;
+  int no_energy_in_i_direction;
   Real dtdrive,tdrive;
   Real expo,dedt,dvol;
   AthenaArray<Real> *vel;

@@ -78,7 +78,7 @@ parser.add_argument(
 # --eos=[name] argument
 parser.add_argument('--eos',
                     default='adiabatic',
-                    choices=['adiabatic', 'isothermal'],
+                    choices=['adiabatic', 'isothermal','cgl'],
                     help='select equation of state')
 
 # --flux=[name] argument
@@ -230,9 +230,11 @@ args = vars(parser.parse_args())
 
 # --- Step 2. Test for incompatible arguments ----------------------------
 
-# Set default flux; HLLD for MHD, HLLC for hydro, HLLE for isothermal hydro or any GR
+# Set default flux; HLLD for MHD, HLLC for hydro, HLLE for isothermal hydro or any GR or CGL
 if args['flux'] == 'default':
     if args['g']:
+        args['flux'] = 'hlle'
+    elif args['eos'] == 'cgl':
         args['flux'] = 'hlle'
     elif args['b']:
         args['flux'] = 'hlld'
@@ -248,6 +250,8 @@ if args['flux'] == 'hllc' and args['b']:
     raise SystemExit('### CONFIGURE ERROR: HLLC flux cannot be used with MHD')
 if args['flux'] == 'hlld' and not args['b']:
     raise SystemExit('### CONFIGURE ERROR: HLLD flux can only be used with MHD')
+if not args['flux'] == 'hlle' and args['eos'] == 'cgl':
+  raise SystemExit('### CONFIGURE ERROR: CGL supports only HLLE flux')
 
 # Check relativity
 if args['s'] and args['g']:
@@ -268,6 +272,12 @@ if args['eos'] == 'isothermal':
     if args['s'] or args['g']:
         raise SystemExit('### CONFIGURE ERROR: '
                          + 'Isothermal EOS is incompatible with relativity')
+if args['eos'] == 'cgl':
+  if args['s'] or args['g']:
+    raise SystemExit('### CONFIGURE ERROR: '
+                     + 'CGL EOS is not compatible with relativity')
+if args['eos'] == 'cgl' and not args['b']:
+  raise SystemExit('### CONFIGURE ERROR: CGL requries magnetic field')
 
 # --- Step 3. Set definitions and Makefile options based on above argument
 
@@ -283,13 +293,22 @@ definitions['PROBLEM'] = makefile_options['PROBLEM_FILE'] = args['prob']
 definitions['COORDINATE_SYSTEM'] = makefile_options['COORDINATES_FILE'] = args['coord']
 
 # --eos=[name] argument
-definitions['NON_BAROTROPIC_EOS'] = '1' if args['eos'] == 'adiabatic' else '0'
+if args['eos'] == 'adiabatic' or args['eos'] == 'cgl':
+    definitions['NON_BAROTROPIC_EOS'] = '1'
+else:
+    definitions['NON_BAROTROPIC_EOS'] = '0'
+if args['eos'] == 'cgl':
+    definitions['CGL_EOS'] = '1'
+else:
+    definitions['CGL_EOS'] = '0'
 makefile_options['EOS_FILE'] = args['eos']
 # set number of hydro variables for adiabatic/isothermal
 if args['eos'] == 'adiabatic':
     definitions['NHYDRO_VARIABLES'] = '5'
 if args['eos'] == 'isothermal':
     definitions['NHYDRO_VARIABLES'] = '4'
+if args['eos'] == 'cgl':
+  definitions['NHYDRO_VARIABLES'] = '6'
 
 # --flux=[name] argument
 definitions['RSOLVER'] = makefile_options['RSOLVER_FILE'] = args['flux']
@@ -301,13 +320,18 @@ definitions['NUMBER_GHOST_CELLS'] = args['nghost']
 # set variety of macros based on whether MHD/hydro or adi/iso are defined
 if args['b']:
     definitions['MAGNETIC_FIELDS_ENABLED'] = '1'
-    makefile_options['EOS_FILE'] += '_mhd'
     definitions['NFIELD_VARIABLES'] = '3'
-    makefile_options['RSOLVER_DIR'] = 'mhd/'
-    if args['flux'] == 'hlle' or args['flux'] == 'llf' or args['flux'] == 'roe':
-        makefile_options['RSOLVER_FILE'] += '_mhd'
+    if not args['eos'] == 'cgl':
+        if args['flux'] == 'hlle' or args['flux'] == 'llf' or args['flux'] == 'roe':
+            makefile_options['RSOLVER_FILE'] += '_mhd'
+        makefile_options['EOS_FILE'] += '_mhd'
+        makefile_options['RSOLVER_DIR'] = 'mhd/'
     if args['eos'] == 'adiabatic':
         definitions['NWAVE_VALUE'] = '7'
+    elif args['eos'] == 'cgl':
+        makefile_options['RSOLVER_DIR'] = 'cgl/'
+        makefile_options['RSOLVER_FILE'] += '_cgl'
+        definitions['NWAVE_VALUE'] = '8'
     else:
         definitions['NWAVE_VALUE'] = '6'
         if args['flux'] == 'hlld':

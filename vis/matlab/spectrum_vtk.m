@@ -63,7 +63,7 @@ end
 
 
 %%%%%%%%%%%%%%%%%% PLOTTING %%%%%%%%%%%%%%%%%%%%%
-loglog(S.kgrid, S.EK,S.kgrid, S.kgrid.^(-5/3),'k:' )
+loglog(S.kgrid, S.vel1, S.kgrid, S.kgrid.^(-5/3),'k:' )
 ylabel('$E_K$','interpreter','latex')
 xlabel('$k$','interpreter','latex')
 if MHD

@@ -69,6 +69,7 @@ Real Hydro::NewBlockTimeStep(void) {
           wi[IVY]=w(IVY,k,j,i);
           wi[IVZ]=w(IVZ,k,j,i);
           if (NON_BAROTROPIC_EOS) wi[IPR]=w(IPR,k,j,i);
+          if (CGL_EOS) wi[IPP]=w(IPP,k,j,i);
 
           if (MAGNETIC_FIELDS_ENABLED) {
 

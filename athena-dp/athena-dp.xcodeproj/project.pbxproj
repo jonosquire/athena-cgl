@@ -7,6 +7,8 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		A2E01F1A21C0ABDD004AFD6D /* cgl.cpp in Sources */ = {isa = PBXBuildFile; fileRef = A2E01F1921C0ABDD004AFD6D /* cgl.cpp */; };
+		A2E01F1E21C0B012004AFD6D /* hlle_cgl.cpp in Sources */ = {isa = PBXBuildFile; fileRef = A2E01F1C21C0B012004AFD6D /* hlle_cgl.cpp */; };
 		A2E9CAFA216C32070072A4C5 /* time_integrator.cpp in Sources */ = {isa = PBXBuildFile; fileRef = A2E9CA2B216C32070072A4C5 /* time_integrator.cpp */; };
 		A2E9CAFB216C32070072A4C5 /* mg_task_list.cpp in Sources */ = {isa = PBXBuildFile; fileRef = A2E9CA2D216C32070072A4C5 /* mg_task_list.cpp */; };
 		A2E9CAFC216C32070072A4C5 /* grav_task_list.cpp in Sources */ = {isa = PBXBuildFile; fileRef = A2E9CA2E216C32070072A4C5 /* grav_task_list.cpp */; };
@@ -170,6 +172,8 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		A2E01F1921C0ABDD004AFD6D /* cgl.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = cgl.cpp; sourceTree = "<group>"; };
+		A2E01F1C21C0B012004AFD6D /* hlle_cgl.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = hlle_cgl.cpp; sourceTree = "<group>"; };
 		A2E9CA20216C31320072A4C5 /* athena */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.executable"; includeInIndex = 0; path = athena; sourceTree = BUILT_PRODUCTS_DIR; };
 		A2E9CA29216C32070072A4C5 /* athena.hpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.h; path = athena.hpp; sourceTree = "<group>"; };
 		A2E9CA2B216C32070072A4C5 /* time_integrator.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = time_integrator.cpp; sourceTree = "<group>"; };
@@ -372,6 +376,14 @@
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
+		A2E01F1B21C0AFEF004AFD6D /* cgl */ = {
+			isa = PBXGroup;
+			children = (
+				A2E01F1C21C0B012004AFD6D /* hlle_cgl.cpp */,
+			);
+			path = cgl;
+			sourceTree = "<group>";
+		};
 		A2E9CA11216C30C20072A4C5 = {
 			isa = PBXGroup;
 			children = (
@@ -614,6 +626,7 @@
 			isa = PBXGroup;
 			children = (
 				A2E9CAA1216C32070072A4C5 /* isothermal_mhd.cpp */,
+				A2E01F1921C0ABDD004AFD6D /* cgl.cpp */,
 				A2E9CAA2216C32070072A4C5 /* eos.hpp */,
 				A2E9CAA3216C32070072A4C5 /* adiabatic_hydro.cpp */,
 				A2E9CAA4216C32070072A4C5 /* adiabatic_mhd_gr.cpp */,
@@ -645,6 +658,7 @@
 		A2E9CAAE216C32070072A4C5 /* rsolvers */ = {
 			isa = PBXGroup;
 			children = (
+				A2E01F1B21C0AFEF004AFD6D /* cgl */,
 				A2E9CAAF216C32070072A4C5 /* mhd */,
 				A2E9CABA216C32070072A4C5 /* hydro */,
 			);
@@ -878,7 +892,9 @@
 				A2E9CB63216C32070072A4C5 /* hydro_srcterms.cpp in Sources */,
 				A2E9CB6C216C32070072A4C5 /* field_loop_poles.cpp in Sources */,
 				A2E9CB2D216C32070072A4C5 /* multigrid_driver.cpp in Sources */,
+				A2E01F1A21C0ABDD004AFD6D /* cgl.cpp in Sources */,
 				A2E9CB74216C32070072A4C5 /* gr_bondi.cpp in Sources */,
+				A2E01F1E21C0B012004AFD6D /* hlle_cgl.cpp in Sources */,
 				A2E9CB02216C32070072A4C5 /* fftgravity.cpp in Sources */,
 				A2E9CB80216C32070072A4C5 /* visc.cpp in Sources */,
 				A2E9CB13216C32070072A4C5 /* bvals_grav.cpp in Sources */,

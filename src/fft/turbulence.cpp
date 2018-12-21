@@ -42,6 +42,9 @@ TurbulenceDriver::TurbulenceDriver(Mesh *pm, ParameterInput *pin)
   dtdrive = pin->GetReal("problem","dtdrive"); // driving interval
   // Note that currently this does not allow time-correlated driving!
   tdrive = pm->time;
+   
+  // If set to i=1,2,3, no perturbations in dv_i direction, 0 is isotropic
+  no_energy_in_i_direction = pin->GetOrAddInteger("problem","no_energy_in_i_direction",0);
 
   if (pm->turb_flag == 0) {
     std::stringstream msg;
@@ -221,6 +224,13 @@ void TurbulenceDriver::Perturb(Real dt) {
   Real aa, b, c, s, de, v1, v2, v3, den, M1, M2, M3;
   Real m[4] = {0}, gm[4];
   AthenaArray<Real> &dv1 = vel[0], &dv2 = vel[1], &dv3 = vel[2];
+  
+  // Set energy to zero in some direction based on no_energy_in_i_direction
+  Real dv1_mult = 1., dv2_mult = 1., dv3_mult = 1.;
+  if (no_energy_in_i_direction == 1) dv1_mult = 0. ;
+  if (no_energy_in_i_direction == 2) dv2_mult = 0. ;
+  if (no_energy_in_i_direction == 3) dv3_mult = 0. ;
+  
 
   for (int igid=nbs, nb=0; igid<=nbe; igid++, nb++) {
     MeshBlock *pmb=pm->FindMeshBlock(igid);
@@ -230,9 +240,9 @@ void TurbulenceDriver::Perturb(Real dt) {
           for (int i=is; i<=ie; i++) {
             den = pmb->phydro->u(IDN,k,j,i);
             m[0] += den;
-            m[1] += den*dv1(nb,k,j,i);
-            m[2] += den*dv2(nb,k,j,i);
-            m[3] += den*dv3(nb,k,j,i);
+            m[1] += den*dv1_mult*dv1(nb,k,j,i);
+            m[2] += den*dv2_mult*dv2(nb,k,j,i);
+            m[3] += den*dv3_mult*dv3(nb,k,j,i);
           }
         }
       }

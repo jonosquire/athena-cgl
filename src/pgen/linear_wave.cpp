@@ -74,7 +74,7 @@ void Mesh::InitUserMeshData(ParameterInput *pin) {
   ang_2 = pin->GetOrAddReal("problem", "ang_2", -999.9);
   ang_3 = pin->GetOrAddReal("problem", "ang_3", -999.9);
   
-  int kn = pin->GetOrAddInteger("problem", "kn", 1); // Mode number in box
+  int kn = pin->GetInteger("problem", "kn"); // Mode number in box
 
   ang_2_vert = pin->GetOrAddBoolean("problem", "ang_2_vert", false);
   ang_3_vert = pin->GetOrAddBoolean("problem", "ang_3_vert", false);
@@ -136,7 +136,7 @@ void Mesh::InitUserMeshData(ParameterInput *pin) {
 
   // Initialize k_parallel
   k_par = 2.0*(PI)*kn/lambda;
-  std::cout << "Mode wavenumber is " << k_par << std::endl;
+  std::cout << "Mode number is " << kn << " wavenumber is " << k_par << std::endl;
 
   // Compute eigenvectors, where the quantities u0 and bx0 are parallel to the
   // wavevector, and v0,w0,by0,bz0 are perpendicular.
@@ -482,6 +482,11 @@ void MeshBlock::ProblemGenerator(ParameterInput *pin) {
         if (MAGNETIC_FIELDS_ENABLED) {
           phydro->u(IEN,k,j,i) += 0.5*(bx0*bx0+by0*by0+bz0*bz0);
         }
+      }
+      if (CGL_EOS) { // Not proper eigenmdoes right now, just constant mu
+        phydro->u(IMU,k,j,i) = p0/std::sqrt(bx0*bx0+by0*by0+bz0*bz0);
+        phydro->u(IEN,k,j,i) = 1.5*p0 + 0.5*d0*u0*u0 + amp*sn*rem[4][wave_flag]
+                              + 0.5*(bx0*bx0+by0*by0+bz0*bz0);
       }
     }
   }}

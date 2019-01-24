@@ -238,11 +238,16 @@ void TurbulenceDriver::Perturb(Real dt) {
       for (int k=ks; k<=ke; k++) {
         for (int j=js; j<=je; j++) {
           for (int i=is; i<=ie; i++) {
+            // Set perturbation in i direction to zero
+            dv1(nb,k,j,i) *= dv1_mult;
+            dv2(nb,k,j,i) *= dv2_mult;
+            dv3(nb,k,j,i) *= dv3_mult;
+            // Sum momentum of perturbations
             den = pmb->phydro->u(IDN,k,j,i);
             m[0] += den;
-            m[1] += den*dv1_mult*dv1(nb,k,j,i);
-            m[2] += den*dv2_mult*dv2(nb,k,j,i);
-            m[3] += den*dv3_mult*dv3(nb,k,j,i);
+            m[1] += den*dv1(nb,k,j,i);
+            m[2] += den*dv2(nb,k,j,i);
+            m[3] += den*dv3(nb,k,j,i);
           }
         }
       }
@@ -347,7 +352,7 @@ void TurbulenceDriver::Perturb(Real dt) {
             M2 = pmb->phydro->u(IM2,k,j,i);
             M3 = pmb->phydro->u(IM3,k,j,i);
 
-            if (NON_BAROTROPIC_EOS) {
+            if (NON_BAROTROPIC_EOS) { // CGL_EOS also covered by this
               pmb->phydro->u(IEN,k,j,i) += s*(M1*v1+M2*v2+M3*v3)
                                          + 0.5*s*s*den*(SQR(v1)+SQR(v2)+SQR(v3));
             }

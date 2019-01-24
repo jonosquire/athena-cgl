@@ -63,6 +63,12 @@ Reconstruction::Reconstruction(MeshBlock *pmb, ParameterInput *pin) {
       throw std::runtime_error(msg.str().c_str());
     }
   }
+  
+  if (CGL_EOS && characteristic_reconstruction){
+    std::stringstream msg;
+    msg << "### ERROR:  CGL is not currently compatible with characteristic reconstruction\n";
+    throw std::runtime_error(msg.str().c_str());
+  }
 
   // switch to secondary PLM and PPM limiters for nonuniform and/or curvilinear meshes
   if ((COORDINATE_SYSTEM == "cylindrical") || (COORDINATE_SYSTEM == "spherical_polar")) {

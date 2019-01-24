@@ -68,37 +68,58 @@ void Mesh::InitUserMeshData(ParameterInput *pin) {
 //========================================================================================
 
 void MeshBlock::ProblemGenerator(ParameterInput *pin) {
+  
+  Real gm1   = pin->GetReal("hydro","gamma")-1.0;
+  Real pres = pin->GetOrAddReal("problem","pres",1.0);
+  Real den = 1.0;
+  
+  // Initialize mean magnetic field
+  // initialize interface B
+  if (MAGNETIC_FIELDS_ENABLED){
+    for (int k=ks; k<=ke; k++) {
+    for (int j=js; j<=je; j++) {
+    for (int i=is; i<=ie+1; i++) {
+      pfield->b.x1f(k,j,i) = pin->GetOrAddReal("problem","B01",0.0);;
+    }}}
+    for (int k=ks; k<=ke; k++) {
+    for (int j=js; j<=je+1; j++) {
+    for (int i=is; i<=ie; i++) {
+      pfield->b.x2f(k,j,i) = pin->GetOrAddReal("problem","B02",0.0);;
+    }}}
+    for (int k=ks; k<=ke+1; k++) {
+    for (int j=js; j<=je; j++) {
+    for (int i=is; i<=ie; i++) {
+      pfield->b.x3f(k,j,i) = pin->GetOrAddReal("problem","B03",0.0);;
+    }}}
+  }
+  
+  
   for (int k=ks; k<=ke; k++) {
   for (int j=js; j<=je; j++) {
   for (int i=is; i<=ie; i++) {
-    phydro->u(IDN,k,j,i) = 1.0;
+    phydro->u(IDN,k,j,i) = den;
 
     phydro->u(IM1,k,j,i) = 0.0;
     phydro->u(IM2,k,j,i) = 0.0;
     phydro->u(IM3,k,j,i) = 0.0;
-
-    if (NON_BAROTROPIC_EOS) {
-      phydro->u(IEN,k,j,i) = 1.0;
+    
+    Real bsq = 0.0;
+    if (MAGNETIC_FIELDS_ENABLED){
+      bsq = 0.5*(SQR(0.5*(pfield->b.x1f(k,j,i) + pfield->b.x1f(k,j,i+1))) +
+                      SQR(0.5*(pfield->b.x2f(k,j,i) + pfield->b.x2f(k,j+1,i))) +
+                      SQR(0.5*(pfield->b.x3f(k,j,i) + pfield->b.x3f(k+1,j,i))));
+    }
+    if (NON_BAROTROPIC_EOS && !CGL_EOS) {
+      phydro->u(IEN,k,j,i) = pres/gm1 + bsq;
+    }
+    
+    if (CGL_EOS) {
+      phydro->u(IMU,k,j,i) = pres/std::sqrt(2.*bsq);
+      phydro->u(IEN,k,j,i) = 1.5*pres + bsq;
     }
   }}}
   
-  // Initialize mean magnetic field
-  // initialize interface B
-  for (int k=ks; k<=ke; k++) {
-  for (int j=js; j<=je; j++) {
-  for (int i=is; i<=ie+1; i++) {
-        pfield->b.x1f(k,j,i) = pin->GetOrAddReal("problem","B01",0.0);;
-  }}}
-  for (int k=ks; k<=ke; k++) {
-  for (int j=js; j<=je+1; j++) {
-  for (int i=is; i<=ie; i++) {
-        pfield->b.x2f(k,j,i) = pin->GetOrAddReal("problem","B02",0.0);;
-  }}}
-  for (int k=ks; k<=ke+1; k++) {
-  for (int j=js; j<=je; j++) {
-  for (int i=is; i<=ie; i++) {
-        pfield->b.x3f(k,j,i) = pin->GetOrAddReal("problem","B03",0.0);;
-  }}}
+  
 }
 
 

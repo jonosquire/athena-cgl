@@ -25,9 +25,18 @@
 
 EquationOfState::EquationOfState(MeshBlock *pmb, ParameterInput *pin) {
   pmy_block_ = pmb;
+//  gamma_ = pin->GetReal("hydro", "gamma");
   density_floor_  = pin->GetOrAddReal("hydro", "dfloor", std::sqrt(1024*(FLT_MIN)));
   pressure_floor_ = pin->GetOrAddReal("hydro", "pfloor", std::sqrt(1024*(FLT_MIN)));
   magnetic_mag_floor_ = pin->GetOrAddReal("hydro", "Bfloor", std::sqrt(1024*(FLT_MIN)));
+  // Collisions and limiters
+  collision_freq_ = pin->GetOrAddReal("hydro", "nu_coll", 0.0);
+  firehose_limiter_ = pin->GetOrAddInteger("hydro", "firehose_limiter", false);
+  mirror_limiter_ = pin->GetOrAddBoolean("hydro", "mirror_limiter", false);
+  limiting_collision_freq_ = pin->GetOrAddReal("hydro", "limiter_nu_coll", 1.e8);
+  
+  std::cout << firehose_limiter_ << std::endl;
+  
 }
 
 // destructor
@@ -85,11 +94,11 @@ void EquationOfState::ConservedToPrimitive(AthenaArray<Real> &cons,
         Real pb = 0.5*(SQR(bcc1) + SQR(bcc2) + SQR(bcc3));
         Real ke = 0.5*di*(SQR(u_m1) + SQR(u_m2) + SQR(u_m3));
         Real bmag = std::sqrt(2.0*pb);
-        if (bmag<magnetic_mag_floor_) {bmag = magnetic_mag_floor_; };
+        if (bmag<magnetic_mag_floor_) {bmag = magnetic_mag_floor_; }; 
         // Might want to throw an error here or something...
         
         w_pp = bmag*u_mu;
-        w_p = 2.0*(u_e - ke - pb - w_pp);
+        w_p = 2.0*(u_e - ke - pb - w_pp); //0.66666667*(u_e - ke - pb); //
         
         // apply pressure floor, correct total energy
         w_p = (w_p > pressure_floor_) ?  w_p : pressure_floor_;
@@ -99,6 +108,7 @@ void EquationOfState::ConservedToPrimitive(AthenaArray<Real> &cons,
         u_mu = (w_pp > pressure_floor_) ?  u_mu : (pressure_floor_/bmag);
       }
     }}
+//  std::cout << std::endl;
   
   return;
 }
@@ -144,6 +154,7 @@ void EquationOfState::PrimitiveToConserved(const AthenaArray<Real> &prim,
         u_m1 = w_vx*w_d;
         u_m2 = w_vy*w_d;
         u_m3 = w_vz*w_d;
+//        u_e = w_p*1.5 + 0.5*(w_d*(SQR(w_vx) + SQR(w_vy) + SQR(w_vz))  + bsqr );
         u_e = 0.5*w_p + w_pp + 0.5*(w_d*(SQR(w_vx) + SQR(w_vy) + SQR(w_vz)) + bsqr);
         u_mu = w_pp/bmag;
 
@@ -158,6 +169,7 @@ void EquationOfState::PrimitiveToConserved(const AthenaArray<Real> &prim,
 // \brief returns adiabatic sound speed given vector of primitive variables
 //  for CGL, this is taken as parallel sound speed p_parr/rho
 Real EquationOfState::SoundSpeed(const Real prim[NHYDRO]) {
+  std::cout << "Shouldn't be here!!" << std::endl;
   return std::sqrt(prim[IPR]/prim[IDN]);
 }
 
@@ -177,6 +189,71 @@ Real EquationOfState::FastMagnetosonicSpeed(const Real prim[(NWAVE)], const Real
   return std::sqrt( 0.5*(qsq + std::sqrt(qsq*qsq + pprp*pprp*(1. - bhatx2) - 12.*pprl*pprp*bhatx2*(2.-bhatx2)
                                          + 12.*pprl*pprl*bhatx2*bhatx2 - 12.*bx2*pprl))/prim[IDN] );
 }
+
+//----------------------------------------------------------------------------------------
+// \!fn Real EquationOfState::Collisions(const Real prim[], const Real bx)
+// \brief Operates on primitive variables to collisionally relax delta_p using implicit method.
+//  Also enforces microinstability limiters. See Sharma et al. 2006 App. A3 for details.
+void EquationOfState::Collisions(AthenaArray<Real> &prim, const AthenaArray<Real> &prim_old,
+                                 const AthenaArray<Real> &bc,
+                                 Real dt, int il, int iu, int jl, int ju, int kl, int ku) {
+  // Compute basic collisions from solving dt(pprp,pprl) = 1/3*(-nu*Dp,2*nu*Dp) with ICs as current pprp,pprl
+  if (collision_freq_ != 0.0) {
+    Real expdtnu = std::exp(-collision_freq_*dt);
+    for (int k=kl; k<=ku; ++k) {
+    for (int j=jl; j<=ju; ++j) {
+#pragma omp simd
+      for (int i=il; i<=iu; ++i) {
+        
+        Real& w_pl = prim(IPR,k,j,i);
+        Real& w_pp = prim(IPP,k,j,i);
+        
+        w_pp = (ONE_3RD*expdtnu + TWO_3RD)*w_pp + (ONE_3RD - ONE_3RD*expdtnu)*w_pl;
+        w_pl = (TWO_3RD - TWO_3RD*expdtnu)*w_pp + (TWO_3RD*expdtnu + ONE_3RD)*w_pl;
+      }
+    }}
+  }
+  
+  // Mirror/firehose limiters.
+  if (firehose_limiter_ || mirror_limiter_) {
+    Real expdtnu = std::exp(-limiting_collision_freq_*dt);
+    for (int k=kl; k<=ku; ++k) {
+      for (int j=jl; j<=ju; ++j) {
+  #pragma omp simd
+        for (int i=il; i<=iu; ++i) {
+          
+          
+          Real& w_pl = prim(IPR,k,j,i);
+          Real& w_pp = prim(IPP,k,j,i);
+          
+          const Real& bcc1 = bc(IB1,k,j,i);
+          const Real& bcc2 = bc(IB2,k,j,i);
+          const Real& bcc3 = bc(IB3,k,j,i);
+          Real bsqr = SQR(bcc1) + SQR(bcc2) + SQR(bcc3);
+          
+          bsqr /= 2.;  //DELETE!!!!
+          if (firehose_limiter_ && (w_pp - w_pl < -bsqr)) {
+            w_pp = (ONE_3RD*expdtnu + TWO_3RD)*(w_pp - 0.5*bsqr) +
+                    (ONE_3RD - ONE_3RD*expdtnu)*(w_pl + 0.5*bsqr);
+            w_pl = (TWO_3RD - TWO_3RD*expdtnu)*(w_pp - 0.5*bsqr) +
+                    (TWO_3RD*expdtnu + ONE_3RD)*(w_pl + 0.5*bsqr);
+          }
+          
+          if (mirror_limiter_ && (w_pp - w_pl > 0.5*bsqr)) {
+            w_pp = (ONE_3RD*expdtnu + TWO_3RD)*(w_pp + 0.25*bsqr) +
+                    (ONE_3RD - ONE_3RD*expdtnu)*(w_pl - 0.25*bsqr);
+            w_pl = (TWO_3RD - TWO_3RD*expdtnu)*(w_pp + 0.25*bsqr) +
+                    (TWO_3RD*expdtnu + ONE_3RD)*(w_pl - 0.25*bsqr);
+          }
+        }
+    }}
+  }
+  
+  
+  return;
+  
+}
+
 
 //---------------------------------------------------------------------------------------
 // \!fn void EquationOfState::ApplyPrimitiveFloors(AthenaArray<Real> &prim,

@@ -27,8 +27,6 @@ void Hydro::RiemannSolver(const int kl, const int ku, const int jl, const int ju
   int ivy = IVX + ((ivx-IVX)+1)%3;
   int ivz = IVX + ((ivx-IVX)+2)%3;
   Real wli[(NWAVE)],wri[(NWAVE)],wroe[(NWAVE)],fl[(NWAVE)],fr[(NWAVE)],flxi[(NWAVE)];
-  Real gm1 = pmy_block->peos->GetGamma() - 1.0;
-  Real iso_cs = pmy_block->peos->GetIsoSoundSpeed();
   
   for (int k=kl; k<=ku; ++k) {
     for (int j=jl; j<=ju; ++j) {
@@ -65,8 +63,8 @@ void Hydro::RiemannSolver(const int kl, const int ku, const int jl, const int ju
         Real dpobsql = 1. + (wli[IPP] - wli[IPR])/(2.*pbl);
         Real dpobsqr = 1. + (wri[IPP] - wri[IPR])/(2.*pbr);
         
-        Real el = wli[IPR]/gm1 + 0.5*wli[IDN]*(SQR(wli[IVX])+SQR(wli[IVY])+SQR(wli[IVZ])) + pbl;
-        Real er = wri[IPR]/gm1 + 0.5*wri[IDN]*(SQR(wri[IVX])+SQR(wri[IVY])+SQR(wri[IVZ])) + pbr;
+        Real el = wli[IPR]*0.5 + wli[IPP] + 0.5*wli[IDN]*(SQR(wli[IVX])+SQR(wli[IVY])+SQR(wli[IVZ])) + pbl;
+        Real er = wri[IPR]*0.5 + wri[IPP]  + 0.5*wri[IDN]*(SQR(wri[IVX])+SQR(wri[IVY])+SQR(wri[IVZ])) + pbr;
         
         Real mul = wli[IPP]/std::sqrt(2.*pbl);
         Real mur = wri[IPP]/std::sqrt(2.*pbr);

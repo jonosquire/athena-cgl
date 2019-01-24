@@ -57,6 +57,13 @@ TimeIntegratorTaskList::TimeIntegratorTaskList(ParameterInput *pin, Mesh *pm)
   int dim = 1;
   if (pm->mesh_size.nx2 > 1) dim = 2;
   if (pm->mesh_size.nx3 > 1) dim = 3;
+    
+  if (CGL_EOS && !(integrator == "rk2" || integrator == "vl2")) {
+    std::cout << "### WARNING in CreateTimeIntegrator" << std::endl
+      << "integrator=" << integrator << " may not be compatible with collisions, "
+      << "setting to vl2" << std::endl;
+    integrator = "vl2";
+  }
 
   if (integrator == "vl2") {
     // VL: second-order van Leer integrator (Stone & Gardiner, NewA 14, 139 2009)
@@ -192,6 +199,7 @@ TimeIntegratorTaskList::TimeIntegratorTaskList(ParameterInput *pin, Mesh *pm)
         << "integrator=" << integrator << " not valid time integrator" << std::endl;
     throw std::runtime_error(msg.str().c_str());
   }
+    
 
   // Set cfl_number based on user input and time integrator CFL limit
   Real cfl_number = pin->GetReal("time","cfl_number");
@@ -283,11 +291,17 @@ TimeIntegratorTaskList::TimeIntegratorTaskList(ParameterInput *pin, Mesh *pm)
 
     // everything else
     AddTimeIntegratorTask(PHY_BVAL,CON2PRIM);
+    
 //    if (SELF_GRAVITY_ENABLED == 1) {
 //      AddTimeIntegratorTask(CORR_GFLX,PHY_BVAL);
 //      AddTimeIntegratorTask(USERWORK,CORR_GFLX);
 //    } else {
-    AddTimeIntegratorTask(USERWORK,PHY_BVAL);
+    if (CGL_EOS) {
+      AddTimeIntegratorTask(COLLISIONS,PHY_BVAL);
+      AddTimeIntegratorTask(USERWORK,COLLISIONS);
+    } else {
+      AddTimeIntegratorTask(USERWORK,PHY_BVAL);
+    }
 //    }
     AddTimeIntegratorTask(NEW_DT,USERWORK);
     if (pm->adaptive==true) {
@@ -477,6 +491,11 @@ void TimeIntegratorTaskList::AddTimeIntegratorTask(uint64_t id, uint64_t dep) {
       task_list_[ntasks].TaskFunc=
         static_cast<enum TaskStatus (TaskList::*)(MeshBlock*,int)>
         (&TimeIntegratorTaskList::FieldDiffusion);
+      break;
+    case (COLLISIONS):
+      task_list_[ntasks].TaskFunc=
+        static_cast<enum TaskStatus (TaskList::*)(MeshBlock*,int)>
+        (&TimeIntegratorTaskList::CGLCollisions);
       break;
 
     default:
@@ -855,6 +874,41 @@ enum TaskStatus TimeIntegratorTaskList::PhysicalBoundary(MeshBlock *pmb, int sta
   }
 
   return TASK_SUCCESS;
+}
+
+enum TaskStatus TimeIntegratorTaskList::CGLCollisions(MeshBlock *pmb, int stage) {
+  if (stage != nstages) return TASK_SUCCESS; // only do on last stage
+  Hydro *phydro=pmb->phydro;
+  Field *pfield=pmb->pfield;
+  BoundaryValues *pbval=pmb->pbval;
+  int il=pmb->is, iu=pmb->ie, jl=pmb->js, ju=pmb->je, kl=pmb->ks, ku=pmb->ke;
+  if (pbval->nblevel[1][1][0] != -1) il-=NGHOST;
+  if (pbval->nblevel[1][1][2] != -1) iu+=NGHOST;
+  if (pbval->nblevel[1][0][1] != -1) jl-=NGHOST;
+  if (pbval->nblevel[1][2][1] != -1) ju+=NGHOST;
+  if (pbval->nblevel[0][1][1] != -1) kl-=NGHOST;
+  if (pbval->nblevel[2][1][1] != -1) ku+=NGHOST;
+  
+  if (stage <= nstages) {
+    // Scaled coefficient for RHS time-advance within stage
+    Real dt = pmb->pmy_mesh->dt;
+    // For VL and RK2 integrators, u1 is un (u at start of time step) at end.
+    //  Need the primitives for this. Put into w1 (may cause problems with GR,
+    //  but incompatible anyway).
+    pmb->peos->ConservedToPrimitive(phydro->u1, phydro->w, pfield->b,
+                                    phydro->w1, pfield->bcc, pmb->pcoord,
+                                    il, iu, jl, ju, kl, ku);
+    // Now compute collisions implicitly using w^n (w1) and w^(n+1) (w),
+    //  put result into w
+    pmb->peos->Collisions(phydro->w, phydro->w1, pfield->bcc,
+                          dt, il, iu, jl, ju, kl, ku);
+    // Update conserved variables again.
+    pmb->peos->PrimitiveToConserved(phydro->w,pfield->bcc, phydro->u, pmb->pcoord,
+                                    il, iu, jl, ju, kl, ku);
+    return TASK_SUCCESS;
+  } else {
+    return TASK_FAIL;
+  }
 }
 
 enum TaskStatus TimeIntegratorTaskList::UserWork(MeshBlock *pmb, int stage) {

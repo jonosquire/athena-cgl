@@ -1,1 +1,1 @@
-python configure.py --prob=linear_wave -b -mpi -hdf5  -fft --cxx clang++ --eos=cgl 
+python configure.py --prob=cpaw -b -mpi -hdf5  -fft --cxx=clang++ --eos=cgl --flux=hlle

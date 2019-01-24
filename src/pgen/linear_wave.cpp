@@ -80,11 +80,13 @@ void Mesh::InitUserMeshData(ParameterInput *pin) {
   ang_3_vert = pin->GetOrAddBoolean("problem", "ang_3_vert", false);
   
   // initialize global variables
-  if (NON_BAROTROPIC_EOS) {
-    gam   = pin->GetReal("hydro", "gamma");
-    gm1 = (gam - 1.0);
-  } else {
-    iso_cs = pin->GetReal("hydro", "iso_sound_speed");
+  if (!CGL_EOS) {
+    if (NON_BAROTROPIC_EOS) {
+      gam   = pin->GetReal("hydro", "gamma");
+      gm1 = (gam - 1.0);
+    } else {
+      iso_cs = pin->GetReal("hydro", "iso_sound_speed");
+    }
   }
 
   // For wavevector along coordinate axes, set desired values of ang_2/ang_3.
@@ -136,7 +138,7 @@ void Mesh::InitUserMeshData(ParameterInput *pin) {
 
   // Initialize k_parallel
   k_par = 2.0*(PI)*kn/lambda;
-  std::cout << "Mode number is " << kn << " wavenumber is " << k_par << std::endl;
+//  std::cout << "Mode number is " << kn << " wavenumber is " << k_par << std::endl;
 
   // Compute eigenvectors, where the quantities u0 and bx0 are parallel to the
   // wavevector, and v0,w0,by0,bz0 are perpendicular.
@@ -156,6 +158,11 @@ void Mesh::InitUserMeshData(ParameterInput *pin) {
     p0 = 1.0/gam;
     h0 = ((p0/gm1 + 0.5*d0*(u0*u0+v0*v0+w0*w0)) + p0)/d0;
     if (MAGNETIC_FIELDS_ENABLED) h0 += (bx0*bx0+by0*by0+bz0*bz0)/d0;
+  }
+  if (CGL_EOS) {
+    p0 = 1.0;
+    h0 = ((1.5*p0 + 0.5*d0*(u0*u0+v0*v0+w0*w0)) + p0)/d0;
+    h0 += (bx0*bx0+by0*by0+bz0*bz0)/d0;
   }
 
   Eigensystem(d0,u0,v0,w0,h0,bx0,by0,bz0,xfact,yfact,ev,rem,lem);

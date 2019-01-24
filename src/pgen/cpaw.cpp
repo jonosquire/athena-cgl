@@ -39,7 +39,7 @@
 
 // Parameters which define initial solution -- made global so that they can be shared
 // with functions A1,2,3 which compute vector potentials
-static Real den, pres, gm1, b_par, b_perp, v_perp, v_par;
+static Real den, pres, gm1, b_par, b_perp, v_perp, v_par, pres_aniso;
 static Real ang_2, ang_3; // Rotation angles about the y and z' axis
 static Real fac, sin_a2, cos_a2, sin_a3, cos_a3;
 static Real lambda, k_par; // Wavelength, 2*PI/wavelength
@@ -69,12 +69,13 @@ void Mesh::InitUserMeshData(ParameterInput *pin) {
   v_par = pin->GetReal("problem","v_par");
   ang_2 = pin->GetOrAddReal("problem","ang_2",-999.9);
   ang_3 = pin->GetOrAddReal("problem","ang_3",-999.9);
-  Real dir = pin->GetOrAddReal("problem","dir",1); // right(1)/left(2) polarization
-  if (NON_BAROTROPIC_EOS) {
+  Real dir = pin->GetOrAddReal("problem","dir",1); // right(1)/left(2) polarization, just B(0)
+  if (NON_BAROTROPIC_EOS && !CGL_EOS) {
     Real gam   = pin->GetReal("hydro","gamma");
     gm1 = (gam - 1.0);
   }
   pres = pin->GetReal("problem","pres");
+  pres_aniso = pin->GetOrAddReal("problem","delta_p",0.0);
   den = 1.0;
 
   Real x1size = mesh_size.x1max - mesh_size.x1min;
@@ -105,8 +106,10 @@ void Mesh::InitUserMeshData(ParameterInput *pin) {
 
   if (dir == 1) // right polarization
     fac = 1.0;
-  else          // left polarization
+  else if (dir ==2)        // left polarization
     fac = -1.0;
+  else if (dir==0)
+    fac = 0.0;     // Initial B perturbation
   return;
 }
 
@@ -345,14 +348,18 @@ void MeshBlock::ProblemGenerator(ParameterInput *pin) {
       phydro->u(IM1,k,j,i) = mx*cos_a2*cos_a3 - my*sin_a3 - mz*sin_a2*cos_a3;
       phydro->u(IM2,k,j,i) = mx*cos_a2*sin_a3 + my*cos_a3 - mz*sin_a2*sin_a3;
       phydro->u(IM3,k,j,i) = mx*sin_a2                    + mz*cos_a2;
-
-      if (NON_BAROTROPIC_EOS) {
-        phydro->u(IEN,k,j,i) = pres/gm1 +
-          0.5*(SQR(0.5*(pfield->b.x1f(k,j,i) + pfield->b.x1f(k,j,i+1))) +
-               SQR(0.5*(pfield->b.x2f(k,j,i) + pfield->b.x2f(k,j+1,i))) +
-               SQR(0.5*(pfield->b.x3f(k,j,i) + pfield->b.x3f(k+1,j,i)))) +
-          (0.5/den)*(SQR(phydro->u(IM1,k,j,i)) + SQR(phydro->u(IM2,k,j,i)) +
-                     SQR(phydro->u(IM3,k,j,i)));
+      
+      Real bsq = 0.5*(SQR(0.5*(pfield->b.x1f(k,j,i) + pfield->b.x1f(k,j,i+1))) +
+                      SQR(0.5*(pfield->b.x2f(k,j,i) + pfield->b.x2f(k,j+1,i))) +
+                      SQR(0.5*(pfield->b.x3f(k,j,i) + pfield->b.x3f(k+1,j,i))));
+      Real ken = (0.5/den)*(SQR(phydro->u(IM1,k,j,i)) + SQR(phydro->u(IM2,k,j,i)) +
+                            SQR(phydro->u(IM3,k,j,i)));
+      if (NON_BAROTROPIC_EOS && !CGL_EOS) {
+        phydro->u(IEN,k,j,i) = pres/gm1 + bsq + ken;
+      }
+      if (CGL_EOS) {
+        phydro->u(IMU,k,j,i) = (pres + ONE_3RD*pres_aniso)/std::sqrt(2.*bsq);
+        phydro->u(IEN,k,j,i) = 1.5*pres + ken + bsq;
       }
     }
   }}

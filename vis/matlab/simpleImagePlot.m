@@ -5,12 +5,12 @@ folder = '~/Research/athena/wave-tests/cgl';
 
 file = 'LinWave'; % Name of output
 output_id = 2; % Output id (set in input file)
-nums = 0:101;
+nums = 0:201;
 
 filename = @(n,oid) [folder '/' file '.out' num2str(oid) '.'  sprintf('%05d',n) '.athdf'];
 
 
-lims = 0.5*[-1 1];
+lims = 1*[-1 1];
 dpstore = [];ts = [];
 for nnn = nums
     V = readHDF5(filename(nnn,output_id));
@@ -31,7 +31,7 @@ for nnn = nums
     title(['t = ' num2str(V.t)])
     subplot(212)
     plot(V.x,oneD((V.pprp-V.pprl)./(V.Bcc1.^2+ V.Bcc2.^2+V.Bcc3.^2)))
-    ylim([-1.5 0.5])
+    ylim([-0.5 0.25])
     
     dpstore = [dpstore mean(mean(mean(V.pprp-V.pprl)))];
     ts = [ts V.t];

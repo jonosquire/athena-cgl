@@ -46,3 +46,10 @@ meshtest.dat
 # editor temp files
 *~
 *.swp
+
+# Other config scripts
+my_conf*
+
+# tared things
+*.tar.gz
+*.tar

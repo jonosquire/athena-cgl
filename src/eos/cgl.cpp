@@ -207,43 +207,44 @@ void EquationOfState::Collisions(AthenaArray<Real> &prim, const AthenaArray<Real
         
         Real& w_pl = prim(IPR,k,j,i);
         Real& w_pp = prim(IPP,k,j,i);
+        Real w_pp_tmp;
         
-        w_pp = (ONE_3RD*expdtnu + TWO_3RD)*w_pp + (ONE_3RD - ONE_3RD*expdtnu)*w_pl;
+        w_pp_tmp = (ONE_3RD*expdtnu + TWO_3RD)*w_pp + (ONE_3RD - ONE_3RD*expdtnu)*w_pl;
         w_pl = (TWO_3RD - TWO_3RD*expdtnu)*w_pp + (TWO_3RD*expdtnu + ONE_3RD)*w_pl;
+        w_pp = w_pp_tmp;
       }
     }}
   }
   
   // Mirror/firehose limiters.
   if (firehose_limiter_ || mirror_limiter_) {
-    Real expdtnu = std::exp(-limiting_collision_freq_*dt);
+    Real nudt = limiting_collision_freq_*dt;
     for (int k=kl; k<=ku; ++k) {
       for (int j=jl; j<=ju; ++j) {
   #pragma omp simd
         for (int i=il; i<=iu; ++i) {
-          
-          
           Real& w_pl = prim(IPR,k,j,i);
           Real& w_pp = prim(IPP,k,j,i);
+          Real w_pp_tmp;
           
           const Real& bcc1 = bc(IB1,k,j,i);
           const Real& bcc2 = bc(IB2,k,j,i);
           const Real& bcc3 = bc(IB3,k,j,i);
           Real bsqr = SQR(bcc1) + SQR(bcc2) + SQR(bcc3);
           
-          bsqr /= 2.;  //DELETE!!!!
+          
+          bsqr /= 4.;
           if (firehose_limiter_ && (w_pp - w_pl < -bsqr)) {
-            w_pp = (ONE_3RD*expdtnu + TWO_3RD)*(w_pp - 0.5*bsqr) +
-                    (ONE_3RD - ONE_3RD*expdtnu)*(w_pl + 0.5*bsqr);
-            w_pl = (TWO_3RD - TWO_3RD*expdtnu)*(w_pp - 0.5*bsqr) +
-                    (TWO_3RD*expdtnu + ONE_3RD)*(w_pl + 0.5*bsqr);
+            w_pp_tmp = (3.*w_pp + nudt*(2.*w_pp + w_pl - bsqr ))/(3.+3.*nudt);
+            w_pl = (3.*w_pl + nudt*(2.*w_pp + w_pl + 2.*bsqr ))/(3.+3.*nudt);
+            w_pp = w_pp_tmp;
+            
           }
           
           if (mirror_limiter_ && (w_pp - w_pl > 0.5*bsqr)) {
-            w_pp = (ONE_3RD*expdtnu + TWO_3RD)*(w_pp + 0.25*bsqr) +
-                    (ONE_3RD - ONE_3RD*expdtnu)*(w_pl - 0.25*bsqr);
-            w_pl = (TWO_3RD - TWO_3RD*expdtnu)*(w_pp + 0.25*bsqr) +
-                    (TWO_3RD*expdtnu + ONE_3RD)*(w_pl - 0.25*bsqr);
+            w_pp_tmp = (3.*w_pp + nudt*(2.*w_pp + w_pl + 0.5*bsqr ))/(3.+3.*nudt);
+            w_pl = (3.*w_pl + nudt*(2.*w_pp + w_pl - bsqr ))/(3.+3.*nudt);
+            w_pp = w_pp_tmp;
           }
         }
     }}

@@ -38,6 +38,8 @@ HydroDiffusion::HydroDiffusion(Hydro *phyd, ParameterInput *pin) {
   if (pmb_->block_size.nx3 > 1) ncells3 = pmb_->block_size.nx3 + 2*(NGHOST);
 
   // Check if viscous process.
+  
+  
   nu_iso = pin->GetOrAddReal("problem","nu_iso",0.0); // iso viscosity
   nu_aniso = pin->GetOrAddReal("problem","nu_aniso",0.0); // aniso viscosity
   
@@ -106,6 +108,9 @@ HydroDiffusion::HydroDiffusion(Hydro *phyd, ParameterInput *pin) {
       else
         CalcCondCoeff_ = pmb_->pmy_mesh->ConductionCoeff_;
     }
+  } else {
+    kappa_iso = 0.0;
+    kappa_aniso = 0.0;
   }
 
   if (hydro_diffusion_defined) {

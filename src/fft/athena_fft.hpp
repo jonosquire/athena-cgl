@@ -96,8 +96,11 @@ private:
   int dim_;
   int npermute_, swap_;
   void Permute_(int loc[], int npermute);
+  void Permute_(Real loc[], int npermute);
   void Swap_(int loc[], int ref_axis);
+  void Swap_(Real loc[], int ref_axis);
   void RemapArray_(int arr[], int loc[], int dir);
+  void RemapArray_(Real arr[], int loc[], int dir);
 };
 
 //! \class FFTBlock

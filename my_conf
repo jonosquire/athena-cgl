@@ -1,1 +1,1 @@
-python configure.py --prob=cpaw -b -mpi -hdf5  -fft --cxx=clang++ --eos=cgl --flux=hlle
+python configure.py --prob=turb -b -mpi -hdf5  -fft --cxx=clang++ --eos=adiabatic --flux=hlld

@@ -39,10 +39,12 @@ private:
   int nlow,nhigh;
   int no_energy_in_i_direction;
   Real dtdrive,tdrive;
-  Real expo,dedt,dvol;
-//  int time_correlated;
+  Real expo,dedt,dvol,tcorr;
+  int time_correlated;
   AthenaArray<Real> *vel;
-  AthenaFFTComplex **fv_curr_; // Arrays to store FTs of components
+  AthenaFFTComplex **fv_curr_, **fv_old_; // Arrays to store FTs of components
+  void OUEvolve(Real dt);
+  void InitializeOU(void);
 };
 
 #endif // FFT_TURBULENCE_HPP_

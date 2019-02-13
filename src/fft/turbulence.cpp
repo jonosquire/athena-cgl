@@ -47,10 +47,9 @@ TurbulenceDriver::TurbulenceDriver(Mesh *pm, ParameterInput *pin)
   no_energy_in_i_direction = pin->GetOrAddInteger("problem","no_energy_in_i_direction",0);
    
   // Time-correlated forcing, has to create 3 extra arrays.
-//  tcorr = pin->GetOrAddReal("problem","tcorr",0.0); // Correlation time
-//  time_correlated = 0;
-//  if ((tcorr != 0.0) && (pm->turb_flag==3)) time_correlated=1;
-   // SOMETHING REALLY WEIRD GOING ON WITH THIS.... NOT SURE WHAT IT IS
+  tcorr = pin->GetOrAddReal("problem","tcorr",0.0); // Correlation time
+  time_correlated = 0;
+  if ((tcorr != 0.0) && (pm->turb_flag==3)) time_correlated=1;
 
   if (pm->turb_flag == 0) {
     std::stringstream msg;
@@ -82,13 +81,13 @@ TurbulenceDriver::TurbulenceDriver(Mesh *pm, ParameterInput *pin)
   fv_curr_ = new AthenaFFTComplex*[3];
   for (int nv=0; nv<3; nv++) fv_curr_[nv] = new AthenaFFTComplex[pmy_fb->cnt_];
    
-//   if (time_correlated==1) {
-//     fv_old_ = new AthenaFFTComplex*[3];
-//     for (int nv=0; nv<3; nv++) fv_old_[nv] = new AthenaFFTComplex[pmy_fb->cnt_];
-// //    InitializeOU();
-//     if (Globals::my_rank==0)
-//       std::cout << "Using time-correlated driving with tcorr = " << tcorr <<"\n";
-//   }
+  if (time_correlated==1) {
+    fv_old_ = new AthenaFFTComplex*[3];
+    for (int nv=0; nv<3; nv++) fv_old_[nv] = new AthenaFFTComplex[pmy_fb->cnt_];
+    InitializeOU();
+    if (Globals::my_rank==0)
+      std::cout << "Using time-correlated driving with tcorr = " << tcorr <<"\n";
+   }
 
 }
 
@@ -98,10 +97,10 @@ TurbulenceDriver::~TurbulenceDriver() {
   delete [] vel;
   for (int nv=0; nv<3; nv++) delete[] fv_curr_[nv];
   delete [] fv_curr_;
-//  if (time_correlated==1) {
-//    for (int nv=0; nv<3; nv++) delete[] fv_old_[nv];
-//    delete [] fv_old_;
-//  }
+  if (time_correlated==1) {
+    for (int nv=0; nv<3; nv++) delete[] fv_old_[nv];
+    delete [] fv_old_;
+  }
 }
 
 //----------------------------------------------------------------------------------------
@@ -182,10 +181,15 @@ void TurbulenceDriver::Generate(Real dt) {
   }
   
   // Remove the divergence
-//  Project(fv_curr_);
+  // Project(fv_curr_);
+  
+
+  // If time correlated driving, add onto fv_old_ and copy to fv_curr_
+  // Forcing still normalized in the same way
+  if (time_correlated==1) OUEvolve(dt);
+  
   
   // For each of fv_curr_, copy back into fv, take inverse fft, and copy into dv
-  
   for (int nv = 0; nv<3; nv++){
     AthenaArray<Real> &dv = vel[nv], dv_mb;
     AthenaFFTComplex *fv = pfb->in_;
@@ -444,12 +448,12 @@ void TurbulenceDriver::Perturb(Real dt) {
     // driven turbulence
     de = dedt*dt;
     if (Globals::my_rank==0)
-      std::cout << "driven turbulence with " << de << std::endl;
+      std::cout << "driven turbulence with de = " << de << std::endl;
   } else {
     // decaying turbulence (all in one shot)
     de = dedt;
     if (Globals::my_rank==0)
-      std::cout << "decaying turbulence with " << de << std::endl;
+      std::cout << "decaying turbulence with de = " << de << std::endl;
   }
   aa = 0.5*m[0];
   aa = std::max(aa,static_cast<Real>(1.0e-20));
@@ -499,4 +503,67 @@ void TurbulenceDriver::Perturb(Real dt) {
 
 int64_t TurbulenceDriver::GetKcomp(int idx, int disp, int Nx) {
   return ((idx+disp) - static_cast<int64_t>(2*(idx+disp)/Nx)*Nx);
+}
+
+
+//----------------------------------------------------------------------------------------
+//! \fn void TurbulenceDriver::OUEvolve(AthenaFFTComplex **fv_curr_, AthenaFFTComplex **fv_old_, Real dt)
+//  \brief evolves fv_old_ by dt with correlation time tcorr, and copies result in fv_curr_ to use in forcing.
+
+void TurbulenceDriver::OUEvolve(Real dt){
+  FFTBlock *pfb = pmy_fb;
+  AthenaFFTIndex *idx = pfb->b_in_;
+  int knx1=pfb->knx[0],knx2=pfb->knx[1],knx3=pfb->knx[2];
+  Real dt_tcor  = dt/tcorr, sqrt_dt = std::sqrt(dt);
+  for (int k=0; k<knx3; k++) {
+    for (int j=0; j<knx2; j++) {
+      for (int i=0; i<knx1; i++) {
+        int64_t kidx=pfb->GetIndex(i,j,k,idx);
+        for (int reim=0; reim<2; reim ++){
+          fv_old_[0][kidx][reim] -= dt_tcor * fv_old_[0][kidx][reim] + sqrt_dt * fv_curr_[0][kidx][reim];
+          fv_old_[1][kidx][reim] -= dt_tcor * fv_old_[1][kidx][reim] + sqrt_dt * fv_curr_[1][kidx][reim];
+          fv_old_[2][kidx][reim] -= dt_tcor * fv_old_[2][kidx][reim] + sqrt_dt * fv_curr_[2][kidx][reim];
+          // Keep result in fv_old_ for use in next time step
+          // Then also copy to fv_curr_
+          fv_curr_[0][kidx][reim] = fv_old_[0][kidx][reim];
+          fv_curr_[1][kidx][reim] = fv_old_[1][kidx][reim];
+          fv_curr_[2][kidx][reim] = fv_old_[2][kidx][reim];
+
+        }
+  }}}
+}
+
+//----------------------------------------------------------------------------------------
+//! \fn void TurbulenceDriver::InitializeOU()
+//  \brief Sets fv_old_ to it's steady state amplitude, so that you don't get a transient period of forcing at the start. The forcing is normalized after evolving the OU process, so its amplitude at steady state is just ~sqrt(tcorr/2)
+// Also deals with restarts.
+void TurbulenceDriver::InitializeOU(void){
+  FFTBlock *pfb = pmy_fb;
+  AthenaFFTIndex *idx = pfb->b_in_;
+  int knx1=pfb->knx[0],knx2=pfb->knx[1],knx3=pfb->knx[2];
+  Real sqrt_tc = std::sqrt(tcorr/2);
+
+  for (int k=0; k<knx3; k++) {
+    for (int j=0; j<knx2; j++) {
+      for (int i=0; i<knx1; i++) {
+        int64_t kidx=pfb->GetIndex(i,j,k,idx);
+        for (int reim=0; reim<2; reim ++){
+          fv_old_[0][kidx][reim] = 0.0;
+          fv_old_[1][kidx][reim] = 0.0;
+          fv_old_[2][kidx][reim] = 0.0;
+        }
+  }}}
+  // With fv_old_=0.0 this sets both fv_curr_ and fv_old_ to the basic generated noise
+  Generate(1.0);
+
+  for (int k=0; k<knx3; k++) {
+    for (int j=0; j<knx2; j++) {
+      for (int i=0; i<knx1; i++) {
+        int64_t kidx=pfb->GetIndex(i,j,k,idx);
+        for (int reim=0; reim<2; reim ++){
+          fv_old_[0][kidx][reim] = sqrt_tc * fv_curr_[0][kidx][reim];
+          fv_old_[1][kidx][reim] = sqrt_tc * fv_curr_[1][kidx][reim];
+          fv_old_[2][kidx][reim] = sqrt_tc * fv_curr_[2][kidx][reim];
+        }
+  }}}
 }

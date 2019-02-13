@@ -87,8 +87,8 @@ HydroDiffusion::HydroDiffusion(Hydro *phyd, ParameterInput *pin) {
     
     // If anisotropic, check for mirror and firehose limits
     if (nu_aniso > 0.0) {
-      mirror_limit = pin->GetOrAddBoolean("problem","mirror_limit", false);
-      firehose_limit = pin->GetOrAddBoolean("problem","firehose_limit", false);
+      mirror_limit = pin->GetOrAddBoolean("problem","mirror_limiter", false);
+      firehose_limit = pin->GetOrAddBoolean("problem","firehose_limiter", false);
     }
   }
 

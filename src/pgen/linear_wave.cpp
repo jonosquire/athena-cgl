@@ -631,6 +631,7 @@ static void Eigensystem(const Real d, const Real v1, const Real v2, const Real v
       eigenvalues[6] = v1 + cf;
 
       // Right-eigenvectors, stored as COLUMNS (eq. B21) */
+      // Note, this one is 00 01 02 ..., all the others are 00 10 20 ...
       right_eigenmatrix[0][0] = alpha_f;
       right_eigenmatrix[0][1] = 0.0;
       right_eigenmatrix[0][2] = alpha_s;

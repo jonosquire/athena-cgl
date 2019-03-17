@@ -80,6 +80,12 @@ void HistoryOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin, bool flag) {
           Real& u_e = phyd->u(IEN,k,j,i);;
           data_sum[7] += vol(i)*u_e;
         }
+        if (CGL_EOS) {
+          Real& u_e = phyd->u(IEN,k,j,i);;
+          data_sum[7] += vol(i)*u_e;
+          Real& u_mu = phyd->u(IMU,k,j,i);;
+          data_sum[8] += vol(i)*u_mu;
+        }
         if (MAGNETIC_FIELDS_ENABLED) {
           Real& bcc1 = pfld->bcc(IB1,k,j,i);
           Real& bcc2 = pfld->bcc(IB2,k,j,i);
@@ -138,6 +144,10 @@ void HistoryOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin, bool flag) {
       fprintf(pfile,"[%d]=2-KE     ", iout++);
       fprintf(pfile,"[%d]=3-KE     ", iout++);
       if (NON_BAROTROPIC_EOS) fprintf(pfile,"[%d]=tot-E   ", iout++);
+      if (CGL_EOS) {
+        fprintf(pfile,"[%d]=tot-E   ", iout++);
+        fprintf(pfile,"[%d]=mu      ", iout++);
+      }
       if (MAGNETIC_FIELDS_ENABLED) {
         fprintf(pfile,"[%d]=1-ME    ", iout++);
         fprintf(pfile,"[%d]=2-ME    ", iout++);

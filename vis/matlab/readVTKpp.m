@@ -80,7 +80,7 @@ fgetl(fid); % LOOKUP_TABLE default
 
 % read data
 Q = fread(fid,n2read,'*single');
-disp(['Adding ' varname])
+% disp(['Adding ' varname])
 V = setfield(V,varname,reshape(Q,[1 sz ]));
 V.(varname) = squeeze(V.(varname));
 
@@ -92,7 +92,7 @@ while s ~= -1
 
     vtype = sscanf(s, '%s%*s%*s');
     varname = sscanf(s, '%*s%s%*s');
-    disp(['Adding ' varname])
+%     disp(['Adding ' varname])
 
     if strcmp(vtype,'VECTORS') 
         ncmpt=3;
@@ -120,11 +120,19 @@ if isfield(V,'vel')
     V.vel1 = squeeze(V.vel(1,:,:,:));
     V.vel2 = squeeze(V.vel(2,:,:,:));
     V.vel3 = squeeze(V.vel(3,:,:,:));
+    V=rmfield(V,'vel');
+end
+if isfield(V,'mom')
+    V.mom1 = squeeze(V.mom(1,:,:,:));
+    V.mom2 = squeeze(V.mom(2,:,:,:));
+    V.mom3 = squeeze(V.mom(3,:,:,:));
+    V=rmfield(V,'mom');
 end
 if isfield(V,'Bcc')
     V.Bcc1 = squeeze(V.Bcc(1,:,:,:));
     V.Bcc2 = squeeze(V.Bcc(2,:,:,:));
     V.Bcc3 = squeeze(V.Bcc(3,:,:,:));
+    V=rmfield(V,'Bcc');
 end
 
     

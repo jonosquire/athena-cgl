@@ -70,7 +70,7 @@ void Mesh::InitUserMeshData(ParameterInput *pin) {
   ang_2 = pin->GetOrAddReal("problem","ang_2",-999.9);
   ang_3 = pin->GetOrAddReal("problem","ang_3",-999.9);
   Real dir = pin->GetOrAddReal("problem","dir",1); // right(1)/left(2) polarization, just B(0)
-  if (NON_BAROTROPIC_EOS && !CGL_EOS) {
+  if (NON_BAROTROPIC_EOS) {
     Real gam   = pin->GetReal("hydro","gamma");
     gm1 = (gam - 1.0);
   }
@@ -354,7 +354,7 @@ void MeshBlock::ProblemGenerator(ParameterInput *pin) {
                       SQR(0.5*(pfield->b.x3f(k,j,i) + pfield->b.x3f(k+1,j,i))));
       Real ken = (0.5/den)*(SQR(phydro->u(IM1,k,j,i)) + SQR(phydro->u(IM2,k,j,i)) +
                             SQR(phydro->u(IM3,k,j,i)));
-      if (NON_BAROTROPIC_EOS && !CGL_EOS) {
+      if (NON_BAROTROPIC_EOS) {
         phydro->u(IEN,k,j,i) = pres/gm1 + bsq + ken;
       }
       if (CGL_EOS) {

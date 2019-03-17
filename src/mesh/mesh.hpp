@@ -43,6 +43,7 @@ class EquationOfState;
 class FFTDriver;
 class FFTGravityDriver;
 class TurbulenceDriver;
+class FFTConductionDriver;
 
 //----------------------------------------------------------------------------------------
 //! \class MeshBlock
@@ -182,6 +183,7 @@ public:
 
   TurbulenceDriver *ptrbd;
   FFTGravityDriver *pfgrd;
+  FFTConductionDriver *pfcondd;
   MGGravityDriver *pmgrd;
 
   AthenaArray<Real> *ruser_mesh_data;

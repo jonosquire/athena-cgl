@@ -327,7 +327,7 @@ void OutputType::LoadOutputData(MeshBlock *pmb) {
   }
 
   // total energy
-  if (NON_BAROTROPIC_EOS) {
+  if (NON_BAROTROPIC_EOS || CGL_EOS) {
     if (output_params.variable.compare("E") == 0 ||
         output_params.variable.compare("cons") == 0) {
       pod = new OutputData;
@@ -339,28 +339,28 @@ void OutputType::LoadOutputData(MeshBlock *pmb) {
     }
   }
 
-  // pressure (rename to parallel in CGL)
+  // pressure
   if (NON_BAROTROPIC_EOS) {
-    if (CGL_EOS) {
-      if (output_params.variable.compare("pprl") == 0 ||
-          output_params.variable.compare("prim") == 0) {
-        pod = new OutputData;
-        pod->type = "SCALARS";
-        pod->name = "pprl";
-        pod->data.InitWithShallowSlice(phyd->w,4,IPR,1);
-        AppendOutputDataNode(pod);
-        num_vars_++;
-      }
-    } else {
-      if (output_params.variable.compare("p") == 0 ||
-          output_params.variable.compare("prim") == 0) {
-        pod = new OutputData;
-        pod->type = "SCALARS";
-        pod->name = "press";
-        pod->data.InitWithShallowSlice(phyd->w,4,IPR,1);
-        AppendOutputDataNode(pod);
-        num_vars_++;
-      }
+    if (output_params.variable.compare("p") == 0 ||
+        output_params.variable.compare("prim") == 0) {
+      pod = new OutputData;
+      pod->type = "SCALARS";
+      pod->name = "press";
+      pod->data.InitWithShallowSlice(phyd->w,4,IPR,1);
+      AppendOutputDataNode(pod);
+      num_vars_++;
+    }
+  }
+  // (rename to pprl in CGL)
+  if (CGL_EOS) {
+    if (output_params.variable.compare("pprl") == 0 ||
+        output_params.variable.compare("prim") == 0) {
+      pod = new OutputData;
+      pod->type = "SCALARS";
+      pod->name = "pprl";
+      pod->data.InitWithShallowSlice(phyd->w,4,IPR,1);
+      AppendOutputDataNode(pod);
+      num_vars_++;
     }
   }
   

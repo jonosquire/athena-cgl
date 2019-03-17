@@ -30,6 +30,7 @@ void HydroSourceTerms::ConstantAcceleration(const Real dt,const AthenaArray<Real
         Real src = dt*prim(IDN,k,j,i)*g1_;
         cons(IM1,k,j,i) += src;
         if (NON_BAROTROPIC_EOS) cons(IEN,k,j,i) += src*prim(IVX,k,j,i);
+        // Need to add CGL stuff here...
       }
     }}
   }

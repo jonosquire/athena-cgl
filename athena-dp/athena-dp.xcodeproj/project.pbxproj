@@ -157,6 +157,8 @@
 		A2E9CB8B216C32070072A4C5 /* turb.cpp in Sources */ = {isa = PBXBuildFile; fileRef = A2E9CAF7216C32070072A4C5 /* turb.cpp */; };
 		A2E9CB8C216C32070072A4C5 /* shu_osher.cpp in Sources */ = {isa = PBXBuildFile; fileRef = A2E9CAF8216C32070072A4C5 /* shu_osher.cpp */; };
 		A2E9CB8D216C32070072A4C5 /* rotor.cpp in Sources */ = {isa = PBXBuildFile; fileRef = A2E9CAF9216C32070072A4C5 /* rotor.cpp */; };
+		A2EFDB872236F9D1004295BE /* hlld_cgl.cpp in Sources */ = {isa = PBXBuildFile; fileRef = A2EFDB862236F9D1004295BE /* hlld_cgl.cpp */; };
+		A2EFDB8A223B54D1004295BE /* fft_conduction.cpp in Sources */ = {isa = PBXBuildFile; fileRef = A2EFDB88223B54D1004295BE /* fft_conduction.cpp */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXCopyFilesBuildPhase section */
@@ -363,6 +365,9 @@
 		A2E9CAF7216C32070072A4C5 /* turb.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = turb.cpp; sourceTree = "<group>"; };
 		A2E9CAF8216C32070072A4C5 /* shu_osher.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = shu_osher.cpp; sourceTree = "<group>"; };
 		A2E9CAF9216C32070072A4C5 /* rotor.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = rotor.cpp; sourceTree = "<group>"; };
+		A2EFDB862236F9D1004295BE /* hlld_cgl.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = hlld_cgl.cpp; sourceTree = "<group>"; };
+		A2EFDB88223B54D1004295BE /* fft_conduction.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = fft_conduction.cpp; sourceTree = "<group>"; };
+		A2EFDB89223B54D1004295BE /* fft_conduction.hpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.h; path = fft_conduction.hpp; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -380,6 +385,7 @@
 			isa = PBXGroup;
 			children = (
 				A2E01F1C21C0B012004AFD6D /* hlle_cgl.cpp */,
+				A2EFDB862236F9D1004295BE /* hlld_cgl.cpp */,
 			);
 			path = cgl;
 			sourceTree = "<group>";
@@ -703,6 +709,8 @@
 			children = (
 				A2E9CAC5216C32070072A4C5 /* hydro_diffusion.hpp */,
 				A2E9CAC6216C32070072A4C5 /* conduction.cpp */,
+				A2EFDB88223B54D1004295BE /* fft_conduction.cpp */,
+				A2EFDB89223B54D1004295BE /* fft_conduction.hpp */,
 				A2E9CAC7216C32070072A4C5 /* viscosity.cpp */,
 				A2E9CAC8216C32070072A4C5 /* hydro_diffusion.cpp */,
 			);
@@ -851,6 +859,7 @@
 				A2E9CB0E216C32070072A4C5 /* bvals_fc.cpp in Sources */,
 				A2E9CB8A216C32070072A4C5 /* noh.cpp in Sources */,
 				A2E9CB1B216C32070072A4C5 /* gr_user.cpp in Sources */,
+				A2EFDB8A223B54D1004295BE /* fft_conduction.cpp in Sources */,
 				A2E9CB06216C32070072A4C5 /* reflect.cpp in Sources */,
 				A2E9CB0B216C32070072A4C5 /* flux_correction_cc.cpp in Sources */,
 				A2E9CB7D216C32070072A4C5 /* orszag_tang.cpp in Sources */,
@@ -910,6 +919,7 @@
 				A2E9CB30216C32070072A4C5 /* fft_3d.cpp in Sources */,
 				A2E9CB17216C32070072A4C5 /* spherical_polar.cpp in Sources */,
 				A2E9CB3F216C32070072A4C5 /* main.cpp in Sources */,
+				A2EFDB872236F9D1004295BE /* hlld_cgl.cpp in Sources */,
 				A2E9CB48216C32070072A4C5 /* parameter_input.cpp in Sources */,
 				A2E9CB87216C32070072A4C5 /* blast.cpp in Sources */,
 				A2E9CB3B216C32070072A4C5 /* restart.cpp in Sources */,

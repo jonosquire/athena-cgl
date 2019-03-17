@@ -46,6 +46,7 @@
 #include "meshblock_tree.hpp"
 #include "mesh.hpp"
 #include "../hydro/hydro_diffusion/hydro_diffusion.hpp"
+#include "../hydro/hydro_diffusion/fft_conduction.hpp"
 #include "../field/field_diffusion/field_diffusion.hpp"
 
 // MPI/OpenMP header
@@ -495,6 +496,9 @@ Mesh::Mesh(ParameterInput *pin, int mesh_test) {
     pfgrd = new FFTGravityDriver(this, pin);
   else if (SELF_GRAVITY_ENABLED==2)
     pmgrd = new MGGravityDriver(this, MGBoundaryFunction_, pin);
+  
+  if (CGL_EOS && pblock->phydro->phdif->UsingFFTForConduction())
+    pfcondd = new FFTConductionDriver(this,pin);
 
   if (turb_flag > 0)
     ptrbd = new TurbulenceDriver(this, pin);
@@ -829,6 +833,10 @@ Mesh::Mesh(ParameterInput *pin, IOWrapper& resfile, int mesh_test) {
     pfgrd = new FFTGravityDriver(this, pin);
   else if (SELF_GRAVITY_ENABLED==2)
     pmgrd = new MGGravityDriver(this, MGBoundaryFunction_, pin);
+  
+  Real kl_lf = pin->GetOrAddReal("problem","kl_landau",0.0);
+  if (CGL_EOS && kl_lf<0.0)
+    pfcondd = new FFTConductionDriver(this,pin);
 
   if (turb_flag > 0)
     ptrbd = new TurbulenceDriver(this, pin);

@@ -69,7 +69,10 @@ Real Hydro::NewBlockTimeStep(void) {
           wi[IVY]=w(IVY,k,j,i);
           wi[IVZ]=w(IVZ,k,j,i);
           if (NON_BAROTROPIC_EOS) wi[IPR]=w(IPR,k,j,i);
-          if (CGL_EOS) wi[IPP]=w(IPP,k,j,i);
+          if (CGL_EOS) {
+            wi[IPR]=w(IPR,k,j,i);
+            wi[IPP]=w(IPP,k,j,i);
+          }
 
           if (MAGNETIC_FIELDS_ENABLED) {
 
@@ -131,6 +134,7 @@ Real Hydro::NewBlockTimeStep(void) {
   if (phdif->hydro_diffusion_defined) {
     Real mindt_vis, mindt_cnd;
     phdif->NewHydroDiffusionDt(mindt_vis, mindt_cnd);
+//    std::cout << "min_dt=" << min_dt << ", mindt_cnd=" << mindt_cnd << "\n";
     min_dt = std::min(min_dt,mindt_vis);
     min_dt = std::min(min_dt,mindt_cnd);
   } // hydro diffusion

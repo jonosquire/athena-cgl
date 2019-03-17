@@ -28,6 +28,7 @@ void  ConstConduction(HydroDiffusion *phdif, MeshBlock *pmb, const AthenaArray<R
 
 
 enum {ISO=0, ANI=1};
+enum {FLXEN=0, FLXMU=1};
 
 //! \class HydroDiffusion
 //  \brief data and functions for physical diffusion processes in the hydro
@@ -48,6 +49,11 @@ public:
   Real kappa_iso, kappa_aniso; // thermal conduction coeff
   AthenaArray<Real> cndflx[3]; // thermal stress tensor
   AthenaArray<Real> kappa; // conduction array
+  
+  // Landau-fluid |k| for evaluating heat fluxes (todo, kl_lf==-1 uses Fourier method).
+  Real kl_lf; // See Sharma et al. 2006, equations (13) and (14)
+  bool UsingFFTForConduction(){return using_fft_for_conduction_;};
+  
 
   // functions
   void CalcHydroDiffusionFlux(const AthenaArray<Real> &p, const AthenaArray<Real> &c,
@@ -55,6 +61,8 @@ public:
                               const FaceField &b, const AthenaArray<Real> &bcc);
   void AddHydroDiffusionFlux(AthenaArray<Real> *flx_src, AthenaArray<Real> *flx_des);
   void AddHydroDiffusionEnergyFlux(AthenaArray<Real> *flux_src,
+                                   AthenaArray<Real> *flux_des);
+  void AddHydroDiffusionLFHeatFlux(AthenaArray<Real> *flux_src,
                                    AthenaArray<Real> *flux_des);
   void ClearHydroFlux(AthenaArray<Real> *flx);
   void SetHydroDiffusivity(AthenaArray<Real> &w, AthenaArray<Real> &bc);
@@ -72,6 +80,11 @@ public:
                              AthenaArray<Real> *flx);
   void ThermalFlux_aniso(const AthenaArray<Real> &p,const AthenaArray<Real> &c,
                                AthenaArray<Real> *flx);
+  
+  // heat fluxes in CGL (keep separate from ThermalFlux_aniso for clarity)
+  void HeatFlux_LandauFluid(const AthenaArray<Real> &p,const AthenaArray<Real> &c,
+                         AthenaArray<Real> *flx,
+                    const FaceField &b, const AthenaArray<Real> &bcc);
 
 private:
   MeshBlock *pmb_;    // ptr to meshblock containing this HydroDiffusion
@@ -83,6 +96,9 @@ private:
   AthenaArray<Real> fx_,fy_,fz_;
   AthenaArray<Real> dx1_,dx2_,dx3_;
   AthenaArray<Real> nu_tot_,kappa_tot_;
+  AthenaArray<Real> pprl_rho_, pprp_rho_, bmagcc_; // tmp storage to save computation in HeatFlux
+  
+  bool using_fft_for_conduction_;
 
   // functions pointer to calculate spatial dependent coefficients
   ViscosityCoeff_t CalcViscCoeff_;

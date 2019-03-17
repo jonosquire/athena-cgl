@@ -26,6 +26,7 @@
 #define NON_BAROTROPIC_EOS @NON_BAROTROPIC_EOS@
 
 // CGL equation of state (i.e. two-pressures for weakly collisional MHD)? default=0 (false)
+// NON_BAROTROPIC_EOS=false if CGL_EOS=true
 #define CGL_EOS @CGL_EOS@
 
 // Riemann solver

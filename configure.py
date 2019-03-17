@@ -230,11 +230,9 @@ args = vars(parser.parse_args())
 
 # --- Step 2. Test for incompatible arguments ----------------------------
 
-# Set default flux; HLLD for MHD, HLLC for hydro, HLLE for isothermal hydro or any GR or CGL
+# Set default flux; HLLD for MHD or CGL, HLLC for hydro, HLLE for isothermal hydro or any GR
 if args['flux'] == 'default':
     if args['g']:
-        args['flux'] = 'hlle'
-    elif args['eos'] == 'cgl':
         args['flux'] = 'hlle'
     elif args['b']:
         args['flux'] = 'hlld'
@@ -250,8 +248,6 @@ if args['flux'] == 'hllc' and args['b']:
     raise SystemExit('### CONFIGURE ERROR: HLLC flux cannot be used with MHD')
 if args['flux'] == 'hlld' and not args['b']:
     raise SystemExit('### CONFIGURE ERROR: HLLD flux can only be used with MHD')
-if not args['flux'] == 'hlle' and args['eos'] == 'cgl':
-  raise SystemExit('### CONFIGURE ERROR: CGL supports only HLLE flux')
 
 # Check relativity
 if args['s'] and args['g']:
@@ -293,7 +289,7 @@ definitions['PROBLEM'] = makefile_options['PROBLEM_FILE'] = args['prob']
 definitions['COORDINATE_SYSTEM'] = makefile_options['COORDINATES_FILE'] = args['coord']
 
 # --eos=[name] argument
-if args['eos'] == 'adiabatic' or args['eos'] == 'cgl':
+if args['eos'] == 'adiabatic':
     definitions['NON_BAROTROPIC_EOS'] = '1'
 else:
     definitions['NON_BAROTROPIC_EOS'] = '0'

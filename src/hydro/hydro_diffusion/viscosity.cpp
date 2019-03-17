@@ -38,7 +38,7 @@ void HydroDiffusion::ViscousFlux_iso(const AthenaArray<Real> &prim,
   int is = pmb_->is; int js = pmb_->js; int ks = pmb_->ks;
   int ie = pmb_->ie; int je = pmb_->je; int ke = pmb_->ke;
   Real nu1, denf, flx1, flx2, flx3;
-  Real nuiso2 = - TWO_3RD;
+  Real nuiso2 = 0.0;//- TWO_3RD;
 
   Divv(prim, divv_);
 
@@ -67,7 +67,7 @@ void HydroDiffusion::ViscousFlux_iso(const AthenaArray<Real> &prim,
         x1flux(IM1,k,j,i) += flx1;
         x1flux(IM2,k,j,i) += flx2;
         x1flux(IM3,k,j,i) += flx3;
-        if (NON_BAROTROPIC_EOS)
+        if (NON_BAROTROPIC_EOS) // Could add CGL_EOS here.. Depends whether viscosity heats or not
           x1flux(IEN,k,j,i) += 0.5*((prim(IM1,k,j,i-1) + prim(IM1,k,j,i))*flx1 +
                                     (prim(IM2,k,j,i-1) + prim(IM2,k,j,i))*flx2 +
                                     (prim(IM3,k,j,i-1) + prim(IM3,k,j,i))*flx3);
@@ -100,7 +100,7 @@ void HydroDiffusion::ViscousFlux_iso(const AthenaArray<Real> &prim,
           x2flux(IM1,k,j,i) += flx1;
           x2flux(IM2,k,j,i) += flx2;
           x2flux(IM3,k,j,i) += flx3;
-          if (NON_BAROTROPIC_EOS)
+          if (NON_BAROTROPIC_EOS)// Could add CGL_EOS here.. Depends whether viscosity heats or not
             x2flux(IEN,k,j,i) += 0.5*((prim(IM1,k,j,i) + prim(IM1,k,j-1,i))*flx1 +
                                       (prim(IM2,k,j,i) + prim(IM2,k,j-1,i))*flx2 +
                                       (prim(IM3,k,j,i) + prim(IM3,k,j-1,i))*flx3);
@@ -122,7 +122,7 @@ void HydroDiffusion::ViscousFlux_iso(const AthenaArray<Real> &prim,
       x2flux(IM1,ks,js,i) += flx1;
       x2flux(IM2,ks,js,i) += flx2;
       x2flux(IM3,ks,js,i) += flx3;
-      if (NON_BAROTROPIC_EOS)
+      if (NON_BAROTROPIC_EOS)// Could add CGL_EOS here.. Depends whether viscosity heats or not
         x2flux(IEN,ks,js,i) += prim(IM1,ks,js,i)*flx1 +
                                prim(IM2,ks,js,i)*flx2 +
                                prim(IM3,ks,js,i)*flx3;
@@ -501,7 +501,8 @@ void HydroDiffusion::ViscousFlux_aniso(const AthenaArray<Real> &prim,
 //  if (pmb_->block_size.nx3 == 1) // 2D MHD limits
 //    jl=js-1, ju=je+1, kl=ks, ku=ke;
 //  else // 3D MHD limits
-    jl=js-1, ju=je+1, kl=ks-1, ku=ke+1;
+  
+  jl=js-1, ju=je+1, kl=ks-1, ku=ke+1;
   
   for (int k=kl; k<=ku; ++k) {
     for (int j=jl; j<=ju; ++j) {

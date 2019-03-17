@@ -36,7 +36,7 @@
 
 // Parameters which define initial solution -- made global so that they can be shared
 // with functions A1,2,3 which compute vector potentials
-static Real d0,p0,u0,bx0, by0, bz0, dby, dbz;
+static Real d0,p0,pp0,pl0,u0,bx0, by0, bz0, dby, dbz;
 static int wave_flag;
 static Real ang_2, ang_3; // Rotation angles about the y and z' axis
 static bool ang_2_vert, ang_3_vert; // Switches to set ang_2 and/or ang_3 to pi/2
@@ -52,7 +52,7 @@ static Real A3(const Real x1, const Real x2, const Real x3);
 
 // function to compute eigenvectors of linear waves
 static void Eigensystem(const Real d, const Real v1, const Real v2, const Real v3,
-  const Real h, const Real b1, const Real b2, const Real b3, const Real x, const Real y,
+  const Real h, const Real pp0, const Real pl0, const Real b1, const Real b2, const Real b3, const Real x, const Real y,
   Real eigenvalues[(NWAVE)],
   Real right_eigenmatrix[(NWAVE)][(NWAVE)], Real left_eigenmatrix[(NWAVE)][(NWAVE)]);
 
@@ -73,8 +73,6 @@ void Mesh::InitUserMeshData(ParameterInput *pin) {
   vflow = pin->GetOrAddReal("problem", "vflow", 0.0);
   ang_2 = pin->GetOrAddReal("problem", "ang_2", -999.9);
   ang_3 = pin->GetOrAddReal("problem", "ang_3", -999.9);
-  
-  int kn = pin->GetInteger("problem", "kn"); // Mode number in box
 
   ang_2_vert = pin->GetOrAddBoolean("problem", "ang_2_vert", false);
   ang_3_vert = pin->GetOrAddBoolean("problem", "ang_3_vert", false);
@@ -137,6 +135,7 @@ void Mesh::InitUserMeshData(ParameterInput *pin) {
     lambda = x3;
 
   // Initialize k_parallel
+  int kn = pin->GetInteger("problem", "kn"); // Mode number in box
   k_par = 2.0*(PI)*kn/lambda;
 //  std::cout << "Mode number is " << kn << " wavenumber is " << k_par << std::endl;
 
@@ -150,6 +149,9 @@ void Mesh::InitUserMeshData(ParameterInput *pin) {
   bx0 = pin->GetOrAddReal("problem", "bx0", 1.0);
   by0 = pin->GetOrAddReal("problem", "by0", std::sqrt(2.0));
   bz0 = pin->GetOrAddReal("problem", "bz0", 0.5);
+  // These are ignored for MHD or hydro EoS
+  pp0 = pin->GetOrAddReal("problem", "pp0", 1.0);
+  pl0 = pin->GetOrAddReal("problem", "pl0", 1.0);
   Real xfact = 0.0;
   Real yfact = 1.0;
   Real h0 = 0.0;
@@ -160,12 +162,10 @@ void Mesh::InitUserMeshData(ParameterInput *pin) {
     if (MAGNETIC_FIELDS_ENABLED) h0 += (bx0*bx0+by0*by0+bz0*bz0)/d0;
   }
   if (CGL_EOS) {
-    p0 = 1.0;
-    h0 = ((1.5*p0 + 0.5*d0*(u0*u0+v0*v0+w0*w0)) + p0)/d0;
-    h0 += (bx0*bx0+by0*by0+bz0*bz0)/d0;
+    // Ignore h0 for CGL
   }
 
-  Eigensystem(d0,u0,v0,w0,h0,bx0,by0,bz0,xfact,yfact,ev,rem,lem);
+  Eigensystem(d0,u0,v0,w0,h0,pp0,pl0,bx0,by0,bz0,xfact,yfact,ev,rem,lem);
 
   if (pin->GetOrAddBoolean("problem","test",false)==true && ncycle==0) {
     // reinterpret tlim as the number of orbital periods
@@ -490,10 +490,11 @@ void MeshBlock::ProblemGenerator(ParameterInput *pin) {
           phydro->u(IEN,k,j,i) += 0.5*(bx0*bx0+by0*by0+bz0*bz0);
         }
       }
-      if (CGL_EOS) { // Not proper eigenmdoes right now, just constant mu
-        phydro->u(IMU,k,j,i) = p0/std::sqrt(bx0*bx0+by0*by0+bz0*bz0);
-        phydro->u(IEN,k,j,i) = 1.5*p0 + 0.5*d0*u0*u0 + amp*sn*rem[4][wave_flag]
-                              + 0.5*(bx0*bx0+by0*by0+bz0*bz0);
+      if (CGL_EOS) { //
+        Real bsq = bx0*bx0+by0*by0+bz0*bz0;
+        phydro->u(IEN,k,j,i) = 0.5*pl0 + pp0 + 0.5*d0*u0*u0 + 0.5*bsq +
+                    amp*sn*rem[4][wave_flag];
+        phydro->u(IMU,k,j,i) = pp0/std::sqrt(bsq) + amp*sn*rem[5][wave_flag];
       }
     }
   }}
@@ -545,409 +546,593 @@ static Real A3(const Real x1, const Real x2, const Real x3) {
 //  \brief computes eigenvectors of linear waves
 
 static void Eigensystem(const Real d, const Real v1, const Real v2, const Real v3,
-  const Real h, const Real b1, const Real b2, const Real b3, const Real x, const Real y,
+  const Real h, const Real pprp, const Real pprl, const Real b1, const Real b2, const Real b3, const Real x, const Real y,
   Real eigenvalues[(NWAVE)],
   Real right_eigenmatrix[(NWAVE)][(NWAVE)], Real left_eigenmatrix[(NWAVE)][(NWAVE)]) {
   if (MAGNETIC_FIELDS_ENABLED) {
 
 //--- Adiabatic MHD ---
+    if (!CGL_EOS) {
+      if (NON_BAROTROPIC_EOS) {
+        Real vsq,btsq,bt_starsq,vaxsq,hp,twid_asq,cfsq,cf,cssq,cs;
+        Real bt,bt_star,bet2,bet3,bet2_star,bet3_star,bet_starsq,vbet,alpha_f,alpha_s;
+        Real isqrtd,sqrtd,s,twid_a,qf,qs,af_prime,as_prime,afpbb,aspbb,vax;
+        Real norm,cff,css,af,as,afpb,aspb,q2_star,q3_star,vqstr;
+        Real ct2,tsum,tdif,cf2_cs2;
+        Real qa,qb,qc,qd;
+        vsq = v1*v1 + v2*v2 + v3*v3;
+        btsq = b2*b2 + b3*b3;
+        bt_starsq = (gm1 - (gm1 - 1.0)*y)*btsq;
+        vaxsq = b1*b1/d;
+        hp = h - (vaxsq + btsq/d);
+        twid_asq = std::max((gm1*(hp-0.5*vsq)-(gm1-1.0)*x), TINY_NUMBER);
 
-    if (NON_BAROTROPIC_EOS) {
-      Real vsq,btsq,bt_starsq,vaxsq,hp,twid_asq,cfsq,cf,cssq,cs;
-      Real bt,bt_star,bet2,bet3,bet2_star,bet3_star,bet_starsq,vbet,alpha_f,alpha_s;
-      Real isqrtd,sqrtd,s,twid_a,qf,qs,af_prime,as_prime,afpbb,aspbb,vax;
-      Real norm,cff,css,af,as,afpb,aspb,q2_star,q3_star,vqstr;
-      Real ct2,tsum,tdif,cf2_cs2;
-      Real qa,qb,qc,qd;
-      vsq = v1*v1 + v2*v2 + v3*v3;
-      btsq = b2*b2 + b3*b3;
-      bt_starsq = (gm1 - (gm1 - 1.0)*y)*btsq;
-      vaxsq = b1*b1/d;
-      hp = h - (vaxsq + btsq/d);
-      twid_asq = std::max((gm1*(hp-0.5*vsq)-(gm1-1.0)*x), TINY_NUMBER);
+        // Compute fast- and slow-magnetosonic speeds (eq. B18)
+        ct2 = bt_starsq/d;
+        tsum = vaxsq + ct2 + twid_asq;
+        tdif = vaxsq + ct2 - twid_asq;
+        cf2_cs2 = std::sqrt(tdif*tdif + 4.0*twid_asq*ct2);
 
-      // Compute fast- and slow-magnetosonic speeds (eq. B18)
-      ct2 = bt_starsq/d;
-      tsum = vaxsq + ct2 + twid_asq;
-      tdif = vaxsq + ct2 - twid_asq;
-      cf2_cs2 = std::sqrt(tdif*tdif + 4.0*twid_asq*ct2);
+        cfsq = 0.5*(tsum + cf2_cs2);
+        cf = std::sqrt(cfsq);
 
-      cfsq = 0.5*(tsum + cf2_cs2);
-      cf = std::sqrt(cfsq);
+        cssq = twid_asq*vaxsq/cfsq;
+        cs = std::sqrt(cssq);
 
-      cssq = twid_asq*vaxsq/cfsq;
-      cs = std::sqrt(cssq);
+        // Compute beta(s) (eqs. A17, B20, B28)
+        bt = std::sqrt(btsq);
+        bt_star = std::sqrt(bt_starsq);
+        if (bt == 0.0) {
+          bet2 = 1.0;
+          bet3 = 0.0;
+        } else {
+          bet2 = b2/bt;
+          bet3 = b3/bt;
+        }
+        bet2_star = bet2/std::sqrt(gm1 - (gm1-1.0)*y);
+        bet3_star = bet3/std::sqrt(gm1 - (gm1-1.0)*y);
+        bet_starsq = bet2_star*bet2_star + bet3_star*bet3_star;
+        vbet = v2*bet2_star + v3*bet3_star;
 
-      // Compute beta(s) (eqs. A17, B20, B28)
-      bt = std::sqrt(btsq);
-      bt_star = std::sqrt(bt_starsq);
-      if (bt == 0.0) {
-        bet2 = 1.0;
-        bet3 = 0.0;
+        // Compute alpha(s) (eq. A16)
+        if ((cfsq-cssq) == 0.0) {
+          alpha_f = 1.0;
+          alpha_s = 0.0;
+        } else if ( (twid_asq - cssq) <= 0.0) {
+          alpha_f = 0.0;
+          alpha_s = 1.0;
+        } else if ( (cfsq - twid_asq) <= 0.0) {
+          alpha_f = 1.0;
+          alpha_s = 0.0;
+        } else {
+          alpha_f = std::sqrt((twid_asq - cssq)/(cfsq - cssq));
+          alpha_s = std::sqrt((cfsq - twid_asq)/(cfsq - cssq));
+        }
+
+        // Compute Q(s) and A(s) (eq. A14-15), etc.
+        sqrtd = std::sqrt(d);
+        isqrtd = 1.0/sqrtd;
+        s = SIGN(b1);
+        twid_a = std::sqrt(twid_asq);
+        qf = cf*alpha_f*s;
+        qs = cs*alpha_s*s;
+        af_prime = twid_a*alpha_f*isqrtd;
+        as_prime = twid_a*alpha_s*isqrtd;
+        afpbb = af_prime*bt_star*bet_starsq;
+        aspbb = as_prime*bt_star*bet_starsq;
+
+        // Compute eigenvalues (eq. B17)
+        vax = std::sqrt(vaxsq);
+        eigenvalues[0] = v1 - cf;
+        eigenvalues[1] = v1 - vax;
+        eigenvalues[2] = v1 - cs;
+        eigenvalues[3] = v1;
+        eigenvalues[4] = v1 + cs;
+        eigenvalues[5] = v1 + vax;
+        eigenvalues[6] = v1 + cf;
+
+        // Right-eigenvectors, stored as COLUMNS (eq. B21) */
+        // Note, this one is 00 01 02 ..., all the others are 00 10 20 ...
+        right_eigenmatrix[0][0] = alpha_f;
+        right_eigenmatrix[0][1] = 0.0;
+        right_eigenmatrix[0][2] = alpha_s;
+        right_eigenmatrix[0][3] = 1.0;
+        right_eigenmatrix[0][4] = alpha_s;
+        right_eigenmatrix[0][5] = 0.0;
+        right_eigenmatrix[0][6] = alpha_f;
+
+        right_eigenmatrix[1][0] = alpha_f*eigenvalues[0];
+        right_eigenmatrix[1][1] = 0.0;
+        right_eigenmatrix[1][2] = alpha_s*eigenvalues[2];
+        right_eigenmatrix[1][3] = v1;
+        right_eigenmatrix[1][4] = alpha_s*eigenvalues[4];
+        right_eigenmatrix[1][5] = 0.0;
+        right_eigenmatrix[1][6] = alpha_f*eigenvalues[6];
+
+        qa = alpha_f*v2;
+        qb = alpha_s*v2;
+        qc = qs*bet2_star;
+        qd = qf*bet2_star;
+        right_eigenmatrix[2][0] = qa + qc;
+        right_eigenmatrix[2][1] = -bet3;
+        right_eigenmatrix[2][2] = qb - qd;
+        right_eigenmatrix[2][3] = v2;
+        right_eigenmatrix[2][4] = qb + qd;
+        right_eigenmatrix[2][5] = bet3;
+        right_eigenmatrix[2][6] = qa - qc;
+
+        qa = alpha_f*v3;
+        qb = alpha_s*v3;
+        qc = qs*bet3_star;
+        qd = qf*bet3_star;
+        right_eigenmatrix[3][0] = qa + qc;
+        right_eigenmatrix[3][1] = bet2;
+        right_eigenmatrix[3][2] = qb - qd;
+        right_eigenmatrix[3][3] = v3;
+        right_eigenmatrix[3][4] = qb + qd;
+        right_eigenmatrix[3][5] = -bet2;
+        right_eigenmatrix[3][6] = qa - qc;
+
+        right_eigenmatrix[4][0] = alpha_f*(hp - v1*cf) + qs*vbet + aspbb;
+        right_eigenmatrix[4][1] = -(v2*bet3 - v3*bet2);
+        right_eigenmatrix[4][2] = alpha_s*(hp - v1*cs) - qf*vbet - afpbb;
+        right_eigenmatrix[4][3] = 0.5*vsq + (gm1-1.0)*x/gm1;
+        right_eigenmatrix[4][4] = alpha_s*(hp + v1*cs) + qf*vbet - afpbb;
+        right_eigenmatrix[4][5] = -right_eigenmatrix[4][1];
+        right_eigenmatrix[4][6] = alpha_f*(hp + v1*cf) - qs*vbet + aspbb;
+
+        right_eigenmatrix[5][0] = as_prime*bet2_star;
+        right_eigenmatrix[5][1] = -bet3*s*isqrtd;
+        right_eigenmatrix[5][2] = -af_prime*bet2_star;
+        right_eigenmatrix[5][3] = 0.0;
+        right_eigenmatrix[5][4] = right_eigenmatrix[5][2];
+        right_eigenmatrix[5][5] = right_eigenmatrix[5][1];
+        right_eigenmatrix[5][6] = right_eigenmatrix[5][0];
+
+        right_eigenmatrix[6][0] = as_prime*bet3_star;
+        right_eigenmatrix[6][1] = bet2*s*isqrtd;
+        right_eigenmatrix[6][2] = -af_prime*bet3_star;
+        right_eigenmatrix[6][3] = 0.0;
+        right_eigenmatrix[6][4] = right_eigenmatrix[6][2];
+        right_eigenmatrix[6][5] = right_eigenmatrix[6][1];
+        right_eigenmatrix[6][6] = right_eigenmatrix[6][0];
+
+        // Left-eigenvectors, stored as ROWS (eq. B29)
+        // Normalize by 1/2a^{2}: quantities denoted by \hat{f}
+        norm = 0.5/twid_asq;
+        cff = norm*alpha_f*cf;
+        css = norm*alpha_s*cs;
+        qf *= norm;
+        qs *= norm;
+        af = norm*af_prime*d;
+        as = norm*as_prime*d;
+        afpb = norm*af_prime*bt_star;
+        aspb = norm*as_prime*bt_star;
+
+        // Normalize by (gamma-1)/2a^{2}: quantities denoted by \bar{f}
+        norm *= gm1;
+        alpha_f *= norm;
+        alpha_s *= norm;
+        q2_star = bet2_star/bet_starsq;
+        q3_star = bet3_star/bet_starsq;
+        vqstr = (v2*q2_star + v3*q3_star);
+        norm *= 2.0;
+
+        left_eigenmatrix[0][0] = alpha_f*(vsq-hp) + cff*(cf+v1) - qs*vqstr - aspb;
+        left_eigenmatrix[0][1] = -alpha_f*v1 - cff;
+        left_eigenmatrix[0][2] = -alpha_f*v2 + qs*q2_star;
+        left_eigenmatrix[0][3] = -alpha_f*v3 + qs*q3_star;
+        left_eigenmatrix[0][4] = alpha_f;
+        left_eigenmatrix[0][5] = as*q2_star - alpha_f*b2;
+        left_eigenmatrix[0][6] = as*q3_star - alpha_f*b3;
+
+        left_eigenmatrix[1][0] = 0.5*(v2*bet3 - v3*bet2);
+        left_eigenmatrix[1][1] = 0.0;
+        left_eigenmatrix[1][2] = -0.5*bet3;
+        left_eigenmatrix[1][3] = 0.5*bet2;
+        left_eigenmatrix[1][4] = 0.0;
+        left_eigenmatrix[1][5] = -0.5*sqrtd*bet3*s;
+        left_eigenmatrix[1][6] = 0.5*sqrtd*bet2*s;
+
+        left_eigenmatrix[2][0] = alpha_s*(vsq-hp) + css*(cs+v1) + qf*vqstr + afpb;
+        left_eigenmatrix[2][1] = -alpha_s*v1 - css;
+        left_eigenmatrix[2][2] = -alpha_s*v2 - qf*q2_star;
+        left_eigenmatrix[2][3] = -alpha_s*v3 - qf*q3_star;
+        left_eigenmatrix[2][4] = alpha_s;
+        left_eigenmatrix[2][5] = -af*q2_star - alpha_s*b2;
+        left_eigenmatrix[2][6] = -af*q3_star - alpha_s*b3;
+
+        left_eigenmatrix[3][0] = 1.0 - norm*(0.5*vsq - (gm1-1.0)*x/gm1);
+        left_eigenmatrix[3][1] = norm*v1;
+        left_eigenmatrix[3][2] = norm*v2;
+        left_eigenmatrix[3][3] = norm*v3;
+        left_eigenmatrix[3][4] = -norm;
+        left_eigenmatrix[3][5] = norm*b2;
+        left_eigenmatrix[3][6] = norm*b3;
+
+        left_eigenmatrix[4][0] = alpha_s*(vsq-hp) + css*(cs-v1) - qf*vqstr + afpb;
+        left_eigenmatrix[4][1] = -alpha_s*v1 + css;
+        left_eigenmatrix[4][2] = -alpha_s*v2 + qf*q2_star;
+        left_eigenmatrix[4][3] = -alpha_s*v3 + qf*q3_star;
+        left_eigenmatrix[4][4] = alpha_s;
+        left_eigenmatrix[4][5] = left_eigenmatrix[2][5];
+        left_eigenmatrix[4][6] = left_eigenmatrix[2][6];
+
+        left_eigenmatrix[5][0] = -left_eigenmatrix[1][0];
+        left_eigenmatrix[5][1] = 0.0;
+        left_eigenmatrix[5][2] = -left_eigenmatrix[1][2];
+        left_eigenmatrix[5][3] = -left_eigenmatrix[1][3];
+        left_eigenmatrix[5][4] = 0.0;
+        left_eigenmatrix[5][5] = left_eigenmatrix[1][5];
+        left_eigenmatrix[5][6] = left_eigenmatrix[1][6];
+
+        left_eigenmatrix[6][0] = alpha_f*(vsq-hp) + cff*(cf-v1) + qs*vqstr - aspb;
+        left_eigenmatrix[6][1] = -alpha_f*v1 + cff;
+        left_eigenmatrix[6][2] = -alpha_f*v2 - qs*q2_star;
+        left_eigenmatrix[6][3] = -alpha_f*v3 - qs*q3_star;
+        left_eigenmatrix[6][4] = alpha_f;
+        left_eigenmatrix[6][5] = left_eigenmatrix[0][5];
+        left_eigenmatrix[6][6] = left_eigenmatrix[0][6];
+
+  //--- Isothermal MHD ---
+
       } else {
-        bet2 = b2/bt;
-        bet3 = b3/bt;
+        Real btsq,bt_starsq,vaxsq,twid_csq,cfsq,cf,cssq,cs;
+        Real bt,bt_star,bet2,bet3,bet2_star,bet3_star,bet_starsq,alpha_f,alpha_s;
+        Real sqrtd,s,twid_c,qf,qs,af_prime,as_prime,vax;
+        Real norm,cff,css,af,as,afpb,aspb,q2_star,q3_star,vqstr;
+        Real ct2,tsum,tdif,cf2_cs2;
+        Real di = 1.0/d;
+        btsq = b2*b2 + b3*b3;
+        bt_starsq = btsq*y;
+        vaxsq = b1*b1*di;
+        twid_csq = (iso_cs*iso_cs) + x;
+
+        // Compute fast- and slow-magnetosonic speeds (eq. B39)
+        ct2 = bt_starsq*di;
+        tsum = vaxsq + ct2 + twid_csq;
+        tdif = vaxsq + ct2 - twid_csq;
+        cf2_cs2 = std::sqrt(tdif*tdif + 4.0*twid_csq*ct2);
+
+        cfsq = 0.5*(tsum + cf2_cs2);
+        cf = std::sqrt(cfsq);
+
+        cssq = twid_csq*vaxsq/cfsq;
+        cs = std::sqrt(cssq);
+
+        // Compute beta's (eqs. A17, B28, B40)
+        bt = std::sqrt(btsq);
+        bt_star = std::sqrt(bt_starsq);
+        if (bt == 0.0) {
+          bet2 = 1.0;
+          bet3 = 0.0;
+        } else {
+          bet2 = b2/bt;
+          bet3 = b3/bt;
+        }
+        bet2_star = bet2/std::sqrt(y);
+        bet3_star = bet3/std::sqrt(y);
+        bet_starsq = bet2_star*bet2_star + bet3_star*bet3_star;
+
+        // Compute alpha's (eq. A16)
+        if ((cfsq-cssq) == 0.0) {
+          alpha_f = 1.0;
+          alpha_s = 0.0;
+        } else if ((twid_csq - cssq) <= 0.0) {
+          alpha_f = 0.0;
+          alpha_s = 1.0;
+        } else if ((cfsq - twid_csq) <= 0.0) {
+          alpha_f = 1.0;
+          alpha_s = 0.0;
+        } else {
+          alpha_f = std::sqrt((twid_csq - cssq)/(cfsq - cssq));
+          alpha_s = std::sqrt((cfsq - twid_csq)/(cfsq - cssq));
+        }
+
+        // Compute Q's (eq. A14-15), etc.
+        sqrtd = std::sqrt(d);
+        s = SIGN(b1);
+        twid_c = std::sqrt(twid_csq);
+        qf = cf*alpha_f*s;
+        qs = cs*alpha_s*s;
+        af_prime = twid_c*alpha_f/sqrtd;
+        as_prime = twid_c*alpha_s/sqrtd;
+
+        // Compute eigenvalues (eq. B38)
+        vax  = std::sqrt(vaxsq);
+        eigenvalues[0] = v1 - cf;
+        eigenvalues[1] = v1 - vax;
+        eigenvalues[2] = v1 - cs;
+        eigenvalues[3] = v1 + cs;
+        eigenvalues[4] = v1 + vax;
+        eigenvalues[5] = v1 + cf;
+
+        // Right-eigenvectors, stored as COLUMNS (eq. B21)
+        right_eigenmatrix[0][0] = alpha_f;
+        right_eigenmatrix[1][0] = alpha_f*(v1 - cf);
+        right_eigenmatrix[2][0] = alpha_f*v2 + qs*bet2_star;
+        right_eigenmatrix[3][0] = alpha_f*v3 + qs*bet3_star;
+        right_eigenmatrix[4][0] = as_prime*bet2_star;
+        right_eigenmatrix[5][0] = as_prime*bet3_star;
+
+        right_eigenmatrix[0][1] = 0.0;
+        right_eigenmatrix[1][1] = 0.0;
+        right_eigenmatrix[2][1] = -bet3;
+        right_eigenmatrix[3][1] = bet2;
+        right_eigenmatrix[4][1] = -bet3*s/sqrtd;
+        right_eigenmatrix[5][1] = bet2*s/sqrtd;
+
+        right_eigenmatrix[0][2] = alpha_s;
+        right_eigenmatrix[1][2] = alpha_s*(v1 - cs);
+        right_eigenmatrix[2][2] = alpha_s*v2 - qf*bet2_star;
+        right_eigenmatrix[3][2] = alpha_s*v3 - qf*bet3_star;
+        right_eigenmatrix[4][2] = -af_prime*bet2_star;
+        right_eigenmatrix[5][2] = -af_prime*bet3_star;
+
+        right_eigenmatrix[0][3] = alpha_s;
+        right_eigenmatrix[1][3] = alpha_s*(v1 + cs);
+        right_eigenmatrix[2][3] = alpha_s*v2 + qf*bet2_star;
+        right_eigenmatrix[3][3] = alpha_s*v3 + qf*bet3_star;
+        right_eigenmatrix[4][3] = right_eigenmatrix[4][2];
+        right_eigenmatrix[5][3] = right_eigenmatrix[5][2];
+
+        right_eigenmatrix[0][4] = 0.0;
+        right_eigenmatrix[1][4] = 0.0;
+        right_eigenmatrix[2][4] = bet3;
+        right_eigenmatrix[3][4] = -bet2;
+        right_eigenmatrix[4][4] = right_eigenmatrix[4][1];
+        right_eigenmatrix[5][4] = right_eigenmatrix[5][1];
+
+        right_eigenmatrix[0][5] = alpha_f;
+        right_eigenmatrix[1][5] = alpha_f*(v1 + cf);
+        right_eigenmatrix[2][5] = alpha_f*v2 - qs*bet2_star;
+        right_eigenmatrix[3][5] = alpha_f*v3 - qs*bet3_star;
+        right_eigenmatrix[4][5] = right_eigenmatrix[4][0];
+        right_eigenmatrix[5][5] = right_eigenmatrix[5][0];
+
+        // Left-eigenvectors, stored as ROWS (eq. B41)
+        // Normalize by 1/2a^{2}: quantities denoted by \hat{f}
+        norm = 0.5/twid_csq;
+        cff = norm*alpha_f*cf;
+        css = norm*alpha_s*cs;
+        qf *= norm;
+        qs *= norm;
+        af = norm*af_prime*d;
+        as = norm*as_prime*d;
+        afpb = norm*af_prime*bt_star;
+        aspb = norm*as_prime*bt_star;
+
+        q2_star = bet2_star/bet_starsq;
+        q3_star = bet3_star/bet_starsq;
+        vqstr = (v2*q2_star + v3*q3_star);
+
+        left_eigenmatrix[0][0] = cff*(cf+v1) - qs*vqstr - aspb;
+        left_eigenmatrix[0][1] = -cff;
+        left_eigenmatrix[0][2] = qs*q2_star;
+        left_eigenmatrix[0][3] = qs*q3_star;
+        left_eigenmatrix[0][4] = as*q2_star;
+        left_eigenmatrix[0][5] = as*q3_star;
+
+        left_eigenmatrix[1][0] = 0.5*(v2*bet3 - v3*bet2);
+        left_eigenmatrix[1][1] = 0.0;
+        left_eigenmatrix[1][2] = -0.5*bet3;
+        left_eigenmatrix[1][3] = 0.5*bet2;
+        left_eigenmatrix[1][4] = -0.5*sqrtd*bet3*s;
+        left_eigenmatrix[1][5] = 0.5*sqrtd*bet2*s;
+
+        left_eigenmatrix[2][0] = css*(cs+v1) + qf*vqstr + afpb;
+        left_eigenmatrix[2][1] = -css;
+        left_eigenmatrix[2][2] = -qf*q2_star;
+        left_eigenmatrix[2][3] = -qf*q3_star;
+        left_eigenmatrix[2][4] = -af*q2_star;
+        left_eigenmatrix[2][5] = -af*q3_star;
+
+        left_eigenmatrix[3][0] = css*(cs-v1) - qf*vqstr + afpb;
+        left_eigenmatrix[3][1] = css;
+        left_eigenmatrix[3][2] = -left_eigenmatrix[2][2];
+        left_eigenmatrix[3][3] = -left_eigenmatrix[2][3];
+        left_eigenmatrix[3][4] = left_eigenmatrix[2][4];
+        left_eigenmatrix[3][5] = left_eigenmatrix[2][5];
+
+        left_eigenmatrix[4][0] = -left_eigenmatrix[1][0];
+        left_eigenmatrix[4][1] = 0.0;
+        left_eigenmatrix[4][2] = -left_eigenmatrix[1][2];
+        left_eigenmatrix[4][3] = -left_eigenmatrix[1][3];
+        left_eigenmatrix[4][4] = left_eigenmatrix[1][4];
+        left_eigenmatrix[4][5] = left_eigenmatrix[1][5];
+
+        left_eigenmatrix[5][0] = cff*(cf-v1) + qs*vqstr - aspb;
+        left_eigenmatrix[5][1] = cff;
+        left_eigenmatrix[5][2] = -left_eigenmatrix[0][2];
+        left_eigenmatrix[5][3] = -left_eigenmatrix[0][3];
+        left_eigenmatrix[5][4] = left_eigenmatrix[0][4];
+        left_eigenmatrix[5][5] = left_eigenmatrix[0][5];
       }
-      bet2_star = bet2/std::sqrt(gm1 - (gm1-1.0)*y);
-      bet3_star = bet3/std::sqrt(gm1 - (gm1-1.0)*y);
-      bet_starsq = bet2_star*bet2_star + bet3_star*bet3_star;
-      vbet = v2*bet2_star + v3*bet3_star;
-
-      // Compute alpha(s) (eq. A16)
-      if ((cfsq-cssq) == 0.0) {
-        alpha_f = 1.0;
-        alpha_s = 0.0;
-      } else if ( (twid_asq - cssq) <= 0.0) {
-        alpha_f = 0.0;
-        alpha_s = 1.0;
-      } else if ( (cfsq - twid_asq) <= 0.0) {
-        alpha_f = 1.0;
-        alpha_s = 0.0;
-      } else {
-        alpha_f = std::sqrt((twid_asq - cssq)/(cfsq - cssq));
-        alpha_s = std::sqrt((cfsq - twid_asq)/(cfsq - cssq));
-      }
-
-      // Compute Q(s) and A(s) (eq. A14-15), etc.
-      sqrtd = std::sqrt(d);
-      isqrtd = 1.0/sqrtd;
-      s = SIGN(b1);
-      twid_a = std::sqrt(twid_asq);
-      qf = cf*alpha_f*s;
-      qs = cs*alpha_s*s;
-      af_prime = twid_a*alpha_f*isqrtd;
-      as_prime = twid_a*alpha_s*isqrtd;
-      afpbb = af_prime*bt_star*bet_starsq;
-      aspbb = as_prime*bt_star*bet_starsq;
-
-      // Compute eigenvalues (eq. B17)
-      vax = std::sqrt(vaxsq);
-      eigenvalues[0] = v1 - cf;
-      eigenvalues[1] = v1 - vax;
-      eigenvalues[2] = v1 - cs;
-      eigenvalues[3] = v1;
-      eigenvalues[4] = v1 + cs;
-      eigenvalues[5] = v1 + vax;
-      eigenvalues[6] = v1 + cf;
-
-      // Right-eigenvectors, stored as COLUMNS (eq. B21) */
-      // Note, this one is 00 01 02 ..., all the others are 00 10 20 ...
-      right_eigenmatrix[0][0] = alpha_f;
-      right_eigenmatrix[0][1] = 0.0;
-      right_eigenmatrix[0][2] = alpha_s;
-      right_eigenmatrix[0][3] = 1.0;
-      right_eigenmatrix[0][4] = alpha_s;
-      right_eigenmatrix[0][5] = 0.0;
-      right_eigenmatrix[0][6] = alpha_f;
-
-      right_eigenmatrix[1][0] = alpha_f*eigenvalues[0];
-      right_eigenmatrix[1][1] = 0.0;
-      right_eigenmatrix[1][2] = alpha_s*eigenvalues[2];
-      right_eigenmatrix[1][3] = v1;
-      right_eigenmatrix[1][4] = alpha_s*eigenvalues[4];
-      right_eigenmatrix[1][5] = 0.0;
-      right_eigenmatrix[1][6] = alpha_f*eigenvalues[6];
-
-      qa = alpha_f*v2;
-      qb = alpha_s*v2;
-      qc = qs*bet2_star;
-      qd = qf*bet2_star;
-      right_eigenmatrix[2][0] = qa + qc;
-      right_eigenmatrix[2][1] = -bet3;
-      right_eigenmatrix[2][2] = qb - qd;
-      right_eigenmatrix[2][3] = v2;
-      right_eigenmatrix[2][4] = qb + qd;
-      right_eigenmatrix[2][5] = bet3;
-      right_eigenmatrix[2][6] = qa - qc;
-
-      qa = alpha_f*v3;
-      qb = alpha_s*v3;
-      qc = qs*bet3_star;
-      qd = qf*bet3_star;
-      right_eigenmatrix[3][0] = qa + qc;
-      right_eigenmatrix[3][1] = bet2;
-      right_eigenmatrix[3][2] = qb - qd;
-      right_eigenmatrix[3][3] = v3;
-      right_eigenmatrix[3][4] = qb + qd;
-      right_eigenmatrix[3][5] = -bet2;
-      right_eigenmatrix[3][6] = qa - qc;
-
-      right_eigenmatrix[4][0] = alpha_f*(hp - v1*cf) + qs*vbet + aspbb;
-      right_eigenmatrix[4][1] = -(v2*bet3 - v3*bet2);
-      right_eigenmatrix[4][2] = alpha_s*(hp - v1*cs) - qf*vbet - afpbb;
-      right_eigenmatrix[4][3] = 0.5*vsq + (gm1-1.0)*x/gm1;
-      right_eigenmatrix[4][4] = alpha_s*(hp + v1*cs) + qf*vbet - afpbb;
-      right_eigenmatrix[4][5] = -right_eigenmatrix[4][1];
-      right_eigenmatrix[4][6] = alpha_f*(hp + v1*cf) - qs*vbet + aspbb;
-
-      right_eigenmatrix[5][0] = as_prime*bet2_star;
-      right_eigenmatrix[5][1] = -bet3*s*isqrtd;
-      right_eigenmatrix[5][2] = -af_prime*bet2_star;
-      right_eigenmatrix[5][3] = 0.0;
-      right_eigenmatrix[5][4] = right_eigenmatrix[5][2];
-      right_eigenmatrix[5][5] = right_eigenmatrix[5][1];
-      right_eigenmatrix[5][6] = right_eigenmatrix[5][0];
-
-      right_eigenmatrix[6][0] = as_prime*bet3_star;
-      right_eigenmatrix[6][1] = bet2*s*isqrtd;
-      right_eigenmatrix[6][2] = -af_prime*bet3_star;
-      right_eigenmatrix[6][3] = 0.0;
-      right_eigenmatrix[6][4] = right_eigenmatrix[6][2];
-      right_eigenmatrix[6][5] = right_eigenmatrix[6][1];
-      right_eigenmatrix[6][6] = right_eigenmatrix[6][0];
-
-      // Left-eigenvectors, stored as ROWS (eq. B29)
-      // Normalize by 1/2a^{2}: quantities denoted by \hat{f}
-      norm = 0.5/twid_asq;
-      cff = norm*alpha_f*cf;
-      css = norm*alpha_s*cs;
-      qf *= norm;
-      qs *= norm;
-      af = norm*af_prime*d;
-      as = norm*as_prime*d;
-      afpb = norm*af_prime*bt_star;
-      aspb = norm*as_prime*bt_star;
-
-      // Normalize by (gamma-1)/2a^{2}: quantities denoted by \bar{f}
-      norm *= gm1;
-      alpha_f *= norm;
-      alpha_s *= norm;
-      q2_star = bet2_star/bet_starsq;
-      q3_star = bet3_star/bet_starsq;
-      vqstr = (v2*q2_star + v3*q3_star);
-      norm *= 2.0;
-
-      left_eigenmatrix[0][0] = alpha_f*(vsq-hp) + cff*(cf+v1) - qs*vqstr - aspb;
-      left_eigenmatrix[0][1] = -alpha_f*v1 - cff;
-      left_eigenmatrix[0][2] = -alpha_f*v2 + qs*q2_star;
-      left_eigenmatrix[0][3] = -alpha_f*v3 + qs*q3_star;
-      left_eigenmatrix[0][4] = alpha_f;
-      left_eigenmatrix[0][5] = as*q2_star - alpha_f*b2;
-      left_eigenmatrix[0][6] = as*q3_star - alpha_f*b3;
-
-      left_eigenmatrix[1][0] = 0.5*(v2*bet3 - v3*bet2);
-      left_eigenmatrix[1][1] = 0.0;
-      left_eigenmatrix[1][2] = -0.5*bet3;
-      left_eigenmatrix[1][3] = 0.5*bet2;
-      left_eigenmatrix[1][4] = 0.0;
-      left_eigenmatrix[1][5] = -0.5*sqrtd*bet3*s;
-      left_eigenmatrix[1][6] = 0.5*sqrtd*bet2*s;
-
-      left_eigenmatrix[2][0] = alpha_s*(vsq-hp) + css*(cs+v1) + qf*vqstr + afpb;
-      left_eigenmatrix[2][1] = -alpha_s*v1 - css;
-      left_eigenmatrix[2][2] = -alpha_s*v2 - qf*q2_star;
-      left_eigenmatrix[2][3] = -alpha_s*v3 - qf*q3_star;
-      left_eigenmatrix[2][4] = alpha_s;
-      left_eigenmatrix[2][5] = -af*q2_star - alpha_s*b2;
-      left_eigenmatrix[2][6] = -af*q3_star - alpha_s*b3;
-
-      left_eigenmatrix[3][0] = 1.0 - norm*(0.5*vsq - (gm1-1.0)*x/gm1);
-      left_eigenmatrix[3][1] = norm*v1;
-      left_eigenmatrix[3][2] = norm*v2;
-      left_eigenmatrix[3][3] = norm*v3;
-      left_eigenmatrix[3][4] = -norm;
-      left_eigenmatrix[3][5] = norm*b2;
-      left_eigenmatrix[3][6] = norm*b3;
-
-      left_eigenmatrix[4][0] = alpha_s*(vsq-hp) + css*(cs-v1) - qf*vqstr + afpb;
-      left_eigenmatrix[4][1] = -alpha_s*v1 + css;
-      left_eigenmatrix[4][2] = -alpha_s*v2 + qf*q2_star;
-      left_eigenmatrix[4][3] = -alpha_s*v3 + qf*q3_star;
-      left_eigenmatrix[4][4] = alpha_s;
-      left_eigenmatrix[4][5] = left_eigenmatrix[2][5];
-      left_eigenmatrix[4][6] = left_eigenmatrix[2][6];
-
-      left_eigenmatrix[5][0] = -left_eigenmatrix[1][0];
-      left_eigenmatrix[5][1] = 0.0;
-      left_eigenmatrix[5][2] = -left_eigenmatrix[1][2];
-      left_eigenmatrix[5][3] = -left_eigenmatrix[1][3];
-      left_eigenmatrix[5][4] = 0.0;
-      left_eigenmatrix[5][5] = left_eigenmatrix[1][5];
-      left_eigenmatrix[5][6] = left_eigenmatrix[1][6];
-
-      left_eigenmatrix[6][0] = alpha_f*(vsq-hp) + cff*(cf-v1) + qs*vqstr - aspb;
-      left_eigenmatrix[6][1] = -alpha_f*v1 + cff;
-      left_eigenmatrix[6][2] = -alpha_f*v2 - qs*q2_star;
-      left_eigenmatrix[6][3] = -alpha_f*v3 - qs*q3_star;
-      left_eigenmatrix[6][4] = alpha_f;
-      left_eigenmatrix[6][5] = left_eigenmatrix[0][5];
-      left_eigenmatrix[6][6] = left_eigenmatrix[0][6];
-
-//--- Isothermal MHD ---
-
+  //--- CGL Equation of State.  ---
+      // NOTE: have to supply the numerically calculated eigenmodes here.
+      // See matlab script CGL_waves_for_athena++.m and copy in output
     } else {
-      Real btsq,bt_starsq,vaxsq,twid_csq,cfsq,cf,cssq,cs;
-      Real bt,bt_star,bet2,bet3,bet2_star,bet3_star,bet_starsq,alpha_f,alpha_s;
-      Real sqrtd,s,twid_c,qf,qs,af_prime,as_prime,vax;
-      Real norm,cff,css,af,as,afpb,aspb,q2_star,q3_star,vqstr;
-      Real ct2,tsum,tdif,cf2_cs2;
-      Real di = 1.0/d;
-      btsq = b2*b2 + b3*b3;
-      bt_starsq = btsq*y;
-      vaxsq = b1*b1*di;
-      twid_csq = (iso_cs*iso_cs) + x;
+      //////////////////////////////////////////////////////////////////
+      ////////////////////   INSERT EIGENMODES HERE   //////////////////
+      {
+        if (b1 != 1.0000000000000000)
+          std::cout << "Bx does not match with expected value\n";
+        if (b2 != 1.4142135623730951)
+          std::cout << "By does not match with expected value\n";
+        if (b3 != 0.5000000000000000)
+          std::cout << "Bz does not match with expected value\n";
+        if (v1 != 0.0000000000000000)
+          std::cout << "vx does not match with expected value\n";
+        if (d != 1.0000000000000000)
+          std::cout << "rho does not match with expected value\n";
+        if (pprp != 8.0000000000000000)
+          std::cout << "pprp does not match with expected value\n";
+        if (pprl != 5.0000000000000000)
+          std::cout << "pprl does not match with expected value\n";
+        
+        // Compute eigenvalues
+        eigenvalues[0] = -4.0504624406571814;
+        eigenvalues[1] = -1.8598759722653839;
+        eigenvalues[2] = -1.3867504905630716;
+        eigenvalues[3] = 0.0000000000000000;
+        eigenvalues[4] = 0.0000000000000002;
+        eigenvalues[5] = 1.3867504905630741;
+        eigenvalues[6] = 1.8598759722653830;
+        eigenvalues[7] = 4.0504624406571734;
+        
+        // Compute right eigenvectors
+        right_eigenmatrix[0][0] = 0.0461763602153682;
+        right_eigenmatrix[1][0] = -0.1870356126986054;
+        right_eigenmatrix[2][0] = 0.0515721849688499;
+        right_eigenmatrix[3][0] = 0.0182335208560404;
+        right_eigenmatrix[4][0] = 0.9544912084962514;
+        right_eigenmatrix[5][0] = 0.2049122885794528;
+        right_eigenmatrix[6][0] = 0.0780356538851639;
+        right_eigenmatrix[7][0] = 0.0275897700182628;
+        
+        right_eigenmatrix[0][1] = -0.0772548291421089;
+        right_eigenmatrix[1][1] = 0.1436844004628759;
+        right_eigenmatrix[2][1] = 0.4631971438270955;
+        right_eigenmatrix[3][1] = 0.1637649207131898;
+        right_eigenmatrix[4][1] = -0.7697411802888839;
+        right_eigenmatrix[5][1] = -0.3428261510757946;
+        right_eigenmatrix[6][1] = 0.1397925022249551;
+        right_eigenmatrix[7][1] = 0.0494241131411506;
+        
+        right_eigenmatrix[0][2] = -0.0000000000000005;
+        right_eigenmatrix[1][2] = 0.0000000000000006;
+        right_eigenmatrix[2][2] = 0.2703690352179396;
+        right_eigenmatrix[3][2] = -0.7647191129018719;
+        right_eigenmatrix[4][2] = -0.0000000000000034;
+        right_eigenmatrix[5][2] = -0.0000000000000020;
+        right_eigenmatrix[6][2] = 0.1949658839552013;
+        right_eigenmatrix[7][2] = -0.5514467945790071;
+        
+        right_eigenmatrix[0][3] = 1.0000000000000000;
+        right_eigenmatrix[1][3] = 0.0000000000000000;
+        right_eigenmatrix[2][3] = 0.0000000000000000;
+        right_eigenmatrix[3][3] = 0.0000000000000000;
+        right_eigenmatrix[4][3] = 0.0000000000000000;
+        right_eigenmatrix[5][3] = 0.0000000000000000;
+        right_eigenmatrix[6][3] = 0.0000000000000000;
+        right_eigenmatrix[7][3] = 0.0000000000000000;
+        
+        right_eigenmatrix[0][4] = 0.2661620916435204;
+        right_eigenmatrix[1][4] = 0.0000000000000000;
+        right_eigenmatrix[2][4] = 0.0000000000000001;
+        right_eigenmatrix[3][4] = -0.0000000000000001;
+        right_eigenmatrix[4][4] = -0.4511416462047984;
+        right_eigenmatrix[5][4] = -0.8206196210127484;
+        right_eigenmatrix[6][4] = 0.2154321623372456;
+        right_eigenmatrix[7][4] = 0.0761667714371739;
+        
+        right_eigenmatrix[0][5] = 0.0000000000000003;
+        right_eigenmatrix[1][5] = 0.0000000000000005;
+        right_eigenmatrix[2][5] = -0.2703690352179355;
+        right_eigenmatrix[3][5] = 0.7647191129018733;
+        right_eigenmatrix[4][5] = 0.0000000000000023;
+        right_eigenmatrix[5][5] = 0.0000000000000018;
+        right_eigenmatrix[6][5] = 0.1949658839551999;
+        right_eigenmatrix[7][5] = -0.5514467945790077;
+        
+        right_eigenmatrix[0][6] = 0.0772548291421089;
+        right_eigenmatrix[1][6] = 0.1436844004628759;
+        right_eigenmatrix[2][6] = 0.4631971438270950;
+        right_eigenmatrix[3][6] = 0.1637649207131896;
+        right_eigenmatrix[4][6] = 0.7697411802888844;
+        right_eigenmatrix[5][6] = 0.3428261510757946;
+        right_eigenmatrix[6][6] = -0.1397925022249549;
+        right_eigenmatrix[7][6] = -0.0494241131411506;
+        
+        right_eigenmatrix[0][7] = -0.0461763602153683;
+        right_eigenmatrix[1][7] = -0.1870356126986054;
+        right_eigenmatrix[2][7] = 0.0515721849688501;
+        right_eigenmatrix[3][7] = 0.0182335208560404;
+        right_eigenmatrix[4][7] = -0.9544912084962512;
+        right_eigenmatrix[5][7] = -0.2049122885794529;
+        right_eigenmatrix[6][7] = -0.0780356538851638;
+        right_eigenmatrix[7][7] = -0.0275897700182628;
+        
+        // Compute left eigenvectors
+        left_eigenmatrix[0][0] = 0.0000000000000001;
+        left_eigenmatrix[0][1] = -0.1844565203013406;
+        left_eigenmatrix[0][2] = 0.5016556013044307;
+        left_eigenmatrix[0][3] = 0.6615345109510068;
+        left_eigenmatrix[0][4] = 0.1773620387512890;
+        left_eigenmatrix[0][5] = 0.4952092969937152;
+        left_eigenmatrix[0][6] = -0.0000000000000001;
+        left_eigenmatrix[0][7] = -0.0000000000000000;
+        
+        left_eigenmatrix[1][0] = 0.1940168189491084;
+        left_eigenmatrix[1][1] = -0.0600056534850066;
+        left_eigenmatrix[1][2] = -0.6226639745907686;
+        left_eigenmatrix[1][3] = 0.0000000000000000;
+        left_eigenmatrix[1][4] = -0.2201449594168501;
+        left_eigenmatrix[1][5] = -0.1509085632328527;
+        left_eigenmatrix[1][6] = 0.0685953041715781;
+        left_eigenmatrix[1][7] = -0.7036361679827802;
+        
+        left_eigenmatrix[2][0] = 0.1940168189491079;
+        left_eigenmatrix[2][1] = 0.0600056534850068;
+        left_eigenmatrix[2][2] = 0.6226639745907678;
+        left_eigenmatrix[2][3] = 0.0000000000000000;
+        left_eigenmatrix[2][4] = 0.2201449594168502;
+        left_eigenmatrix[2][5] = 0.1509085632328520;
+        left_eigenmatrix[2][6] = 0.0685953041715782;
+        left_eigenmatrix[2][7] = -0.7036361679827809;
+        
+        left_eigenmatrix[3][0] = 0.2362179179408618;
+        left_eigenmatrix[3][1] = 0.1485940388230528;
+        left_eigenmatrix[3][2] = -0.8434585393955253;
+        left_eigenmatrix[3][3] = 0.0000000000000000;
+        left_eigenmatrix[3][4] = -0.2982076264281373;
+        left_eigenmatrix[3][5] = -0.3307970726590782;
+        left_eigenmatrix[3][6] = 0.0835156458068742;
+        left_eigenmatrix[3][7] = 0.0732751278159677;
+        
+        left_eigenmatrix[4][0] = 0.2362179179408613;
+        left_eigenmatrix[4][1] = -0.1485940388230527;
+        left_eigenmatrix[4][2] = 0.8434585393955247;
+        left_eigenmatrix[4][3] = 0.0000000000000000;
+        left_eigenmatrix[4][4] = 0.2982076264281395;
+        left_eigenmatrix[4][5] = 0.3307970726590777;
+        left_eigenmatrix[4][6] = 0.0835156458068758;
+        left_eigenmatrix[4][7] = 0.0732751278159675;
+        
+        left_eigenmatrix[5][0] = -0.1949658839552006;
+        left_eigenmatrix[5][1] = 0.0000000000000000;
+        left_eigenmatrix[5][2] = 0.2703690352179373;
+        left_eigenmatrix[5][3] = 0.0000000000000000;
+        left_eigenmatrix[5][4] = -0.7647191129018727;
+        left_eigenmatrix[5][5] = -0.0000000000000001;
+        left_eigenmatrix[5][6] = 0.5514467945790076;
+        left_eigenmatrix[5][7] = 0.0000000000000000;
+        
+        left_eigenmatrix[6][0] = 0.1949658839552006;
+        left_eigenmatrix[6][1] = 0.0000000000000001;
+        left_eigenmatrix[6][2] = 0.2703690352179373;
+        left_eigenmatrix[6][3] = 0.0000000000000000;
+        left_eigenmatrix[6][4] = -0.7647191129018723;
+        left_eigenmatrix[6][5] = -0.0000000000000001;
+        left_eigenmatrix[6][6] = -0.5514467945790077;
+        left_eigenmatrix[6][7] = 0.0000000000000000;
+        
+        left_eigenmatrix[7][0] = -0.0000000000000001;
+        left_eigenmatrix[7][1] = 0.2155592906876035;
+        left_eigenmatrix[7][2] = -0.5862439853575638;
+        left_eigenmatrix[7][3] = 0.0000000000000000;
+        left_eigenmatrix[7][4] = -0.2072685487380802;
+        left_eigenmatrix[7][5] = -0.7529222606181517;
+        left_eigenmatrix[7][6] = 0.0000000000000001;
+        left_eigenmatrix[7][7] = 0.0000000000000000;
+        
 
-      // Compute fast- and slow-magnetosonic speeds (eq. B39)
-      ct2 = bt_starsq*di;
-      tsum = vaxsq + ct2 + twid_csq;
-      tdif = vaxsq + ct2 - twid_csq;
-      cf2_cs2 = std::sqrt(tdif*tdif + 4.0*twid_csq*ct2);
-
-      cfsq = 0.5*(tsum + cf2_cs2);
-      cf = std::sqrt(cfsq);
-
-      cssq = twid_csq*vaxsq/cfsq;
-      cs = std::sqrt(cssq);
-
-      // Compute beta's (eqs. A17, B28, B40)
-      bt = std::sqrt(btsq);
-      bt_star = std::sqrt(bt_starsq);
-      if (bt == 0.0) {
-        bet2 = 1.0;
-        bet3 = 0.0;
-      } else {
-        bet2 = b2/bt;
-        bet3 = b3/bt;
       }
-      bet2_star = bet2/std::sqrt(y);
-      bet3_star = bet3/std::sqrt(y);
-      bet_starsq = bet2_star*bet2_star + bet3_star*bet3_star;
-
-      // Compute alpha's (eq. A16)
-      if ((cfsq-cssq) == 0.0) {
-        alpha_f = 1.0;
-        alpha_s = 0.0;
-      } else if ((twid_csq - cssq) <= 0.0) {
-        alpha_f = 0.0;
-        alpha_s = 1.0;
-      } else if ((cfsq - twid_csq) <= 0.0) {
-        alpha_f = 1.0;
-        alpha_s = 0.0;
-      } else {
-        alpha_f = std::sqrt((twid_csq - cssq)/(cfsq - cssq));
-        alpha_s = std::sqrt((cfsq - twid_csq)/(cfsq - cssq));
-      }
-
-      // Compute Q's (eq. A14-15), etc.
-      sqrtd = std::sqrt(d);
-      s = SIGN(b1);
-      twid_c = std::sqrt(twid_csq);
-      qf = cf*alpha_f*s;
-      qs = cs*alpha_s*s;
-      af_prime = twid_c*alpha_f/sqrtd;
-      as_prime = twid_c*alpha_s/sqrtd;
-
-      // Compute eigenvalues (eq. B38)
-      vax  = std::sqrt(vaxsq);
-      eigenvalues[0] = v1 - cf;
-      eigenvalues[1] = v1 - vax;
-      eigenvalues[2] = v1 - cs;
-      eigenvalues[3] = v1 + cs;
-      eigenvalues[4] = v1 + vax;
-      eigenvalues[5] = v1 + cf;
-
-      // Right-eigenvectors, stored as COLUMNS (eq. B21)
-      right_eigenmatrix[0][0] = alpha_f;
-      right_eigenmatrix[1][0] = alpha_f*(v1 - cf);
-      right_eigenmatrix[2][0] = alpha_f*v2 + qs*bet2_star;
-      right_eigenmatrix[3][0] = alpha_f*v3 + qs*bet3_star;
-      right_eigenmatrix[4][0] = as_prime*bet2_star;
-      right_eigenmatrix[5][0] = as_prime*bet3_star;
-
-      right_eigenmatrix[0][1] = 0.0;
-      right_eigenmatrix[1][1] = 0.0;
-      right_eigenmatrix[2][1] = -bet3;
-      right_eigenmatrix[3][1] = bet2;
-      right_eigenmatrix[4][1] = -bet3*s/sqrtd;
-      right_eigenmatrix[5][1] = bet2*s/sqrtd;
-
-      right_eigenmatrix[0][2] = alpha_s;
-      right_eigenmatrix[1][2] = alpha_s*(v1 - cs);
-      right_eigenmatrix[2][2] = alpha_s*v2 - qf*bet2_star;
-      right_eigenmatrix[3][2] = alpha_s*v3 - qf*bet3_star;
-      right_eigenmatrix[4][2] = -af_prime*bet2_star;
-      right_eigenmatrix[5][2] = -af_prime*bet3_star;
-
-      right_eigenmatrix[0][3] = alpha_s;
-      right_eigenmatrix[1][3] = alpha_s*(v1 + cs);
-      right_eigenmatrix[2][3] = alpha_s*v2 + qf*bet2_star;
-      right_eigenmatrix[3][3] = alpha_s*v3 + qf*bet3_star;
-      right_eigenmatrix[4][3] = right_eigenmatrix[4][2];
-      right_eigenmatrix[5][3] = right_eigenmatrix[5][2];
-
-      right_eigenmatrix[0][4] = 0.0;
-      right_eigenmatrix[1][4] = 0.0;
-      right_eigenmatrix[2][4] = bet3;
-      right_eigenmatrix[3][4] = -bet2;
-      right_eigenmatrix[4][4] = right_eigenmatrix[4][1];
-      right_eigenmatrix[5][4] = right_eigenmatrix[5][1];
-
-      right_eigenmatrix[0][5] = alpha_f;
-      right_eigenmatrix[1][5] = alpha_f*(v1 + cf);
-      right_eigenmatrix[2][5] = alpha_f*v2 - qs*bet2_star;
-      right_eigenmatrix[3][5] = alpha_f*v3 - qs*bet3_star;
-      right_eigenmatrix[4][5] = right_eigenmatrix[4][0];
-      right_eigenmatrix[5][5] = right_eigenmatrix[5][0];
-
-      // Left-eigenvectors, stored as ROWS (eq. B41)
-      // Normalize by 1/2a^{2}: quantities denoted by \hat{f}
-      norm = 0.5/twid_csq;
-      cff = norm*alpha_f*cf;
-      css = norm*alpha_s*cs;
-      qf *= norm;
-      qs *= norm;
-      af = norm*af_prime*d;
-      as = norm*as_prime*d;
-      afpb = norm*af_prime*bt_star;
-      aspb = norm*as_prime*bt_star;
-
-      q2_star = bet2_star/bet_starsq;
-      q3_star = bet3_star/bet_starsq;
-      vqstr = (v2*q2_star + v3*q3_star);
-
-      left_eigenmatrix[0][0] = cff*(cf+v1) - qs*vqstr - aspb;
-      left_eigenmatrix[0][1] = -cff;
-      left_eigenmatrix[0][2] = qs*q2_star;
-      left_eigenmatrix[0][3] = qs*q3_star;
-      left_eigenmatrix[0][4] = as*q2_star;
-      left_eigenmatrix[0][5] = as*q3_star;
-
-      left_eigenmatrix[1][0] = 0.5*(v2*bet3 - v3*bet2);
-      left_eigenmatrix[1][1] = 0.0;
-      left_eigenmatrix[1][2] = -0.5*bet3;
-      left_eigenmatrix[1][3] = 0.5*bet2;
-      left_eigenmatrix[1][4] = -0.5*sqrtd*bet3*s;
-      left_eigenmatrix[1][5] = 0.5*sqrtd*bet2*s;
-
-      left_eigenmatrix[2][0] = css*(cs+v1) + qf*vqstr + afpb;
-      left_eigenmatrix[2][1] = -css;
-      left_eigenmatrix[2][2] = -qf*q2_star;
-      left_eigenmatrix[2][3] = -qf*q3_star;
-      left_eigenmatrix[2][4] = -af*q2_star;
-      left_eigenmatrix[2][5] = -af*q3_star;
-
-      left_eigenmatrix[3][0] = css*(cs-v1) - qf*vqstr + afpb;
-      left_eigenmatrix[3][1] = css;
-      left_eigenmatrix[3][2] = -left_eigenmatrix[2][2];
-      left_eigenmatrix[3][3] = -left_eigenmatrix[2][3];
-      left_eigenmatrix[3][4] = left_eigenmatrix[2][4];
-      left_eigenmatrix[3][5] = left_eigenmatrix[2][5];
-
-      left_eigenmatrix[4][0] = -left_eigenmatrix[1][0];
-      left_eigenmatrix[4][1] = 0.0;
-      left_eigenmatrix[4][2] = -left_eigenmatrix[1][2];
-      left_eigenmatrix[4][3] = -left_eigenmatrix[1][3];
-      left_eigenmatrix[4][4] = left_eigenmatrix[1][4];
-      left_eigenmatrix[4][5] = left_eigenmatrix[1][5];
-
-      left_eigenmatrix[5][0] = cff*(cf-v1) + qs*vqstr - aspb;
-      left_eigenmatrix[5][1] = cff;
-      left_eigenmatrix[5][2] = -left_eigenmatrix[0][2];
-      left_eigenmatrix[5][3] = -left_eigenmatrix[0][3];
-      left_eigenmatrix[5][4] = left_eigenmatrix[0][4];
-      left_eigenmatrix[5][5] = left_eigenmatrix[0][5];
+      ////////////////////    END OF CGL EIGENMODES   //////////////////
+      //////////////////////////////////////////////////////////////////
+      
     }
-  } else {
+  } else { // No magnetic fields
 
 //--- Adiabatic Hydrodynamics ---
 

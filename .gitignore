@@ -53,3 +53,6 @@ my_conf*
 # tared things
 *.tar.gz
 *.tar
+
+# Old version of athena
+athena-OU-v4/*

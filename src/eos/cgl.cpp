@@ -31,12 +31,9 @@ EquationOfState::EquationOfState(MeshBlock *pmb, ParameterInput *pin) {
   magnetic_mag_floor_ = pin->GetOrAddReal("hydro", "Bfloor", std::sqrt(1024*(FLT_MIN)));
   // Collisions and limiters
   collision_freq_ = pin->GetOrAddReal("problem", "nu_coll", 0.0);
-  firehose_limiter_ = pin->GetOrAddInteger("problem", "firehose_limiter", false);
-  mirror_limiter_ = pin->GetOrAddBoolean("problem", "mirror_limiter", false);
+  firehose_limiter_ = pin->GetOrAddInteger("problem", "firehose_limiter", 0);
+  mirror_limiter_ = pin->GetOrAddInteger("problem", "mirror_limiter", 0);
   limiting_collision_freq_ = pin->GetOrAddReal("problem", "limiter_nu_coll", 1.e8);
-  
-  std::cout << firehose_limiter_ << std::endl;
-  
 }
 
 // destructor
@@ -178,7 +175,8 @@ Real EquationOfState::SoundSpeed(const Real prim[NHYDRO]) {
 // \brief returns fast magnetosonic speed given vector of primitive variables
 // In CGL the fast and slow magnetosonic modes are different and complicated, although
 // generally have a similar magnitude to stanard MHD (e.g., fast ~sqrt(v_A^2+cs^2). Expressions
-//  can be found in e.g., Baranov 1970  10.1007/BF01080231, Meng et al. JCP 2012
+//  can be found in e.g., Baranov 1970  10.1007/BF01080231. Note Meng et al. JCP 2012, equation
+// (39) is incorrect, pprp^2(1-bx^2)/4 should be pprp^2(1-bx^2)*bx^2
 Real EquationOfState::FastMagnetosonicSpeed(const Real prim[(NWAVE)], const Real bx) {
   Real bx2 = bx*bx;
   Real bprp2 = (prim[IBY]*prim[IBY] + prim[IBZ]*prim[IBZ]);
@@ -186,8 +184,9 @@ Real EquationOfState::FastMagnetosonicSpeed(const Real prim[(NWAVE)], const Real
   Real pprp = prim[IPP];
   Real pprl = prim[IPR];
   Real qsq = bx2 + bprp2 + 2*pprp + (2.*pprl - pprp)*bhatx2;
-  return std::sqrt( 0.5*(qsq + std::sqrt(qsq*qsq + pprp*pprp*(1. - bhatx2) - 12.*pprl*pprp*bhatx2*(2.-bhatx2)
-                                         + 12.*pprl*pprl*bhatx2*bhatx2 - 12.*bx2*pprl))/prim[IDN] );
+  return std::sqrt( 0.5*(qsq + std::sqrt(qsq*qsq + 4.*pprp*pprp*(1. - bhatx2)*bhatx2
+                                  - 12.*pprl*pprp*bhatx2*(2.-bhatx2)
+                                + 12.*pprl*pprl*bhatx2*bhatx2 - 12.*bx2*pprl))/prim[IDN] );
 }
 
 //----------------------------------------------------------------------------------------
@@ -232,13 +231,10 @@ void EquationOfState::Collisions(AthenaArray<Real> &prim, const AthenaArray<Real
           const Real& bcc3 = bc(IB3,k,j,i);
           Real bsqr = SQR(bcc1) + SQR(bcc2) + SQR(bcc3);
           
-          
-          bsqr /= 4.;
           if (firehose_limiter_ && (w_pp - w_pl < -bsqr)) {
             w_pp_tmp = (3.*w_pp + nudt*(2.*w_pp + w_pl - bsqr ))/(3.+3.*nudt);
             w_pl = (3.*w_pl + nudt*(2.*w_pp + w_pl + 2.*bsqr ))/(3.+3.*nudt);
             w_pp = w_pp_tmp;
-            
           }
           
           if (mirror_limiter_ && (w_pp - w_pl > 0.5*bsqr)) {

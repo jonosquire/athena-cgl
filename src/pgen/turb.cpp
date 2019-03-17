@@ -109,7 +109,7 @@ void MeshBlock::ProblemGenerator(ParameterInput *pin) {
                       SQR(0.5*(pfield->b.x2f(k,j,i) + pfield->b.x2f(k,j+1,i))) +
                       SQR(0.5*(pfield->b.x3f(k,j,i) + pfield->b.x3f(k+1,j,i))));
     }
-    if (NON_BAROTROPIC_EOS && !CGL_EOS) {
+    if (NON_BAROTROPIC_EOS) {
       phydro->u(IEN,k,j,i) = pres/gm1 + bsq;
     }
     

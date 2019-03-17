@@ -62,6 +62,12 @@ HydroDiffusion::HydroDiffusion(Hydro *phyd, ParameterInput *pin) {
       throw std::runtime_error(msg.str().c_str());
       return;
     }
+    if (nu_aniso > 0.0 && CGL_EOS) {
+      msg << "### ERROR in HydroDiffusion::HydroDiffusion" << std::endl
+      << "It doesn't make much sense to use anisotropic diffusion and CGL" << std::endl;
+      throw std::runtime_error(msg.str().c_str());
+      return;
+    }
     hydro_diffusion_defined = true;
     // Allocate memory for fluxes.
     visflx[X1DIR].NewAthenaArray(NHYDRO,ncells3,ncells2,ncells1+1);
@@ -92,7 +98,7 @@ HydroDiffusion::HydroDiffusion(Hydro *phyd, ParameterInput *pin) {
     }
   }
 
-  // Check if thermal conduction.
+  // Check if thermal conduction (in MHD only)
   if (NON_BAROTROPIC_EOS) {
     kappa_iso  = pin->GetOrAddReal("problem","kappa_iso",0.0); // iso thermal conduction
     kappa_aniso  = pin->GetOrAddReal("problem","kappa_aniso",0.0); // aniso conduction
@@ -109,8 +115,46 @@ HydroDiffusion::HydroDiffusion(Hydro *phyd, ParameterInput *pin) {
         CalcCondCoeff_ = pmb_->pmy_mesh->ConductionCoeff_;
     }
   } else {
+    // kappa automatically set to zero for either isothermal or CGL eos
     kappa_iso = 0.0;
     kappa_aniso = 0.0;
+  }
+  
+  // Check if thermal conduction in CGL model.
+  // This is implemented separately from MHD because of its different form.
+  // Set kl_lf=kL to use a constant kL in the 1/|k| operator. Or set kl_lf=-1 to
+  // evaluate 1/|k| as 1/|k_0| with a Fourier transform (where k_0 is direction of
+  // mean magnetic field). This is the better option.
+  using_fft_for_conduction_ = false;
+  if (CGL_EOS){
+    // See Sharma et al. 2006
+    kl_lf = pin->GetOrAddReal("problem","kl_landau",0.0); // 0.0 gives no heat flux (pure CGL)
+    if (kl_lf != 0.0) {
+      if (pmb_->block_size.nx3 == 1) {
+        msg << "### FATAL ERROR in HydroDiffusion::HydroDiffusion" << std::endl
+        << "Landau-Fluid heat fluxes are currently only set up for 3D" << std::endl;
+        throw std::runtime_error(msg.str().c_str());
+        return;
+      }
+      hydro_diffusion_defined = true;
+      cndflx[X1DIR].NewAthenaArray(2,ncells3,ncells2,ncells1+1);
+      cndflx[X2DIR].NewAthenaArray(2,ncells3,ncells2+1,ncells1);
+      cndflx[X3DIR].NewAthenaArray(2,ncells3+1,ncells2,ncells1);
+      // tmp storage of Tprp, Tprl, and |B|
+      pprl_rho_.NewAthenaArray(ncells3,ncells2,ncells1);
+      pprp_rho_.NewAthenaArray(ncells3,ncells2,ncells1);
+      bmagcc_.NewAthenaArray(ncells3,ncells2,ncells1);
+      // Use kappa variable to store kappa for timestep (see App. A2 of Sharma+06)
+      kappa.NewAthenaArray(ncells3,ncells2,ncells1);
+      // Fourier transform is set up in mesh if needed.
+      if (kl_lf < 0.0){
+        using_fft_for_conduction_ = true;
+        std::cout << "Setting kL=100.\n";
+        kl_lf = 100.;
+      }
+    }
+  } else { // CGL
+    kl_lf = 0.0;
   }
 
   if (hydro_diffusion_defined) {
@@ -139,11 +183,21 @@ HydroDiffusion::~HydroDiffusion() {
     fy_.DeleteAthenaArray();
     fz_.DeleteAthenaArray();
     divv_.DeleteAthenaArray();
+    // Should have nu.DeleteAthenaArray(); here?
   }
   if (kappa_iso  > 0.0 || kappa_aniso > 0.0) {
     cndflx[X1DIR].DeleteAthenaArray();
     cndflx[X2DIR].DeleteAthenaArray();
     cndflx[X3DIR].DeleteAthenaArray();
+  }
+  if (kl_lf != 0.0){
+    cndflx[X1DIR].DeleteAthenaArray();
+    cndflx[X2DIR].DeleteAthenaArray();
+    cndflx[X3DIR].DeleteAthenaArray();
+    pprl_rho_.DeleteAthenaArray();
+    pprp_rho_.DeleteAthenaArray();
+    bmagcc_.DeleteAthenaArray();
+    kappa.DeleteAthenaArray();
   }
   if (hydro_diffusion_defined) {
     dx1_.DeleteAthenaArray();
@@ -175,6 +229,10 @@ void HydroDiffusion::CalcHydroDiffusionFlux(const AthenaArray<Real> &prim,
   if (kappa_iso > 0.0) ThermalFlux_iso(prim, cons, cndflx);
   if (kappa_aniso > 0.0) ThermalFlux_aniso(prim, cons, cndflx);
 
+  if (CGL_EOS && kl_lf != 0.0){
+    ClearHydroFlux(cndflx);
+    HeatFlux_LandauFluid(prim, cons, cndflx, b, bcc);
+  }
 
   return;
 }
@@ -205,7 +263,7 @@ void HydroDiffusion::AddHydroDiffusionEnergyFlux(AthenaArray<Real> *flux_src,
         if (pmb_->block_size.nx2 > 1) {
           x2flux(IEN,k,j,i) += x2diflx(k,j,i);
           if(j==je) x2flux(IEN,k,j+1,i) += x2diflx(k,j+1,i);
-       }
+        }
         if (pmb_->block_size.nx3 > 1) {
           x3flux(IEN,k,j,i) += x3diflx(k,j,i);
           if(k==ke) x3flux(IEN,k+1,j,i) += x3diflx(k+1,j,i);
@@ -243,6 +301,55 @@ void HydroDiffusion::AddHydroDiffusionFlux(AthenaArray<Real> *flux_src,
   }
 
   return;
+}
+
+
+//----------------------------------------------------------------------------------------
+//! \fn void HydroDiffusion::AddHydroDiffusionFlux
+//  \brief Adds Landau-fluid heat fluxes to E and mu
+
+void HydroDiffusion::AddHydroDiffusionLFHeatFlux(AthenaArray<Real> *flux_src,
+                                                 AthenaArray<Real> *flux_des){
+  
+  int is = pmb_->is; int js = pmb_->js; int ks = pmb_->ks;
+  int ie = pmb_->ie; int je = pmb_->je; int ke = pmb_->ke;
+  
+  AthenaArray<Real> &x1flux=flux_des[X1DIR];
+  AthenaArray<Real> &x2flux=flux_des[X2DIR];
+  AthenaArray<Real> &x3flux=flux_des[X3DIR];
+  AthenaArray<Real> &x1diflx=flux_src[X1DIR];
+  AthenaArray<Real> &x2diflx=flux_src[X2DIR];
+  AthenaArray<Real> &x3diflx=flux_src[X3DIR];
+  
+  for (int k=ks; k<=ke; ++k) {
+    for (int j=js; j<=je; ++j) {
+#pragma omp simd
+      for (int i=is; i<=ie; ++i) {
+        x1flux(IEN,k,j,i) += x1diflx(FLXEN,k,j,i);
+        x1flux(IMU,k,j,i) += x1diflx(FLXMU,k,j,i);
+        if(i==ie) {
+          x1flux(IEN,k,j,i+1) += x1diflx(FLXEN,k,j,i+1);
+          x1flux(IMU,k,j,i+1) += x1diflx(FLXMU,k,j,i+1);
+        }
+        if (pmb_->block_size.nx2 > 1) {
+          x2flux(IEN,k,j,i) += x2diflx(FLXEN,k,j,i);
+          x2flux(IMU,k,j,i) += x2diflx(FLXMU,k,j,i);
+          if(j==je) {
+            x2flux(IEN,k,j+1,i) += x2diflx(FLXEN,k,j+1,i);
+            x2flux(IMU,k,j+1,i) += x2diflx(FLXMU,k,j+1,i);
+          }
+        }
+        if (pmb_->block_size.nx3 > 1) {
+          x3flux(IEN,k,j,i) += x3diflx(FLXEN,k,j,i);
+          x3flux(IMU,k,j,i) += x3diflx(FLXMU,k,j,i);
+          if(k==ke) {
+            x3flux(IEN,k+1,j,i) += x3diflx(FLXEN,k+1,j,i);
+            x3flux(IMU,k+1,j,i) += x3diflx(FLXMU,k+1,j,i);
+          }
+        }
+      }
+    }
+  }
 }
 
 
@@ -341,6 +448,11 @@ void HydroDiffusion::NewHydroDiffusionDt(Real &dt_vis, Real &dt_cnd) {
 #pragma omp simd
         for (int i=is; i<=ie; ++i) kappa_t(i) += kappa(ANI,k,j,i);
       }
+      if (kl_lf != 0.0){
+#pragma omp simd
+        for (int i=is; i<=ie; ++i) kappa_t(i) += kappa(k,j,i);
+        // kappa(k,j,i) is set in the i-direction loop of HeatFlux_LandauFluid
+      }
       pmb_->pcoord->CenterWidth1(k,j,is,ie,len);
       pmb_->pcoord->CenterWidth2(k,j,is,ie,dx2);
       pmb_->pcoord->CenterWidth3(k,j,is,ie,dx3);
@@ -354,7 +466,7 @@ void HydroDiffusion::NewHydroDiffusionDt(Real &dt_vis, Real &dt_cnd) {
           dt_vis = std::min(dt_vis, static_cast<Real>(SQR(len(i))
                                      *fac/(nu_t(i)+TINY_NUMBER)));
       }
-      if ((kappa_iso > 0.0) || (kappa_aniso > 0.0)) {
+      if ((kappa_iso > 0.0) || (kappa_aniso > 0.0) || (kl_lf != 0.0)) {
         for (int i=is; i<=ie; ++i)
           dt_cnd = std::min(dt_cnd, static_cast<Real>(SQR(len(i))
                                   *fac/(kappa_t(i)+TINY_NUMBER)));

@@ -136,6 +136,7 @@ void FieldDiffusion::CalcFieldDiffusionEMF(FaceField &bi,
 
   // calculate the Poynting flux pflux and add to energy flux in Hydro class
   if (NON_BAROTROPIC_EOS) PoyntingFlux(e_oa, bc);
+  if (CGL_EOS) PoyntingFlux(e_oa, bc);
   return;
 }
 

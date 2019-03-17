@@ -112,6 +112,7 @@ public:
   Real GetDensityFloor() const {return density_floor_;}
   Real GetPressureFloor() const {return pressure_floor_;}
   Real GetBFieldFloor() const {return magnetic_mag_floor_;}
+  Real GetCollisionFreq() const {return collision_freq_;}
 
 private:
   MeshBlock *pmy_block_;                   // ptr to MeshBlock containing this EOS
@@ -120,7 +121,7 @@ private:
   Real magnetic_mag_floor_;                // Magnetic field strength floor
   Real collision_freq_;                    // Collision frequency in CGL
   Real limiting_collision_freq_;           // Collision freq. used in firehose/mirror limiters
-  Real firehose_limiter_, mirror_limiter_; // Mirror/firehose limiter on delta_p
+  int firehose_limiter_, mirror_limiter_; // Mirror/firehose limiter on delta_p
   Real sigma_max_, beta_min_;              // limits on ratios of gas quantities to pmag
   Real gamma_max_;                         // maximum Lorentz factor
   Real rho_min_, rho_pow_;                 // variables to control power-law denity floor

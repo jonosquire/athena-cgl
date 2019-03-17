@@ -60,21 +60,21 @@ void Hydro::RiemannSolver(const int kl, const int ku, const int jl, const int ju
         Real pbl = 0.5*(bxi*bxi + SQR(wli[IBY]) + SQR(wli[IBZ]));
         Real pbr = 0.5*(bxi*bxi + SQR(wri[IBY]) + SQR(wri[IBZ]));
         
-        Real dpobsql = 1. + (wli[IPP] - wli[IPR])/(2.*pbl);
-        Real dpobsqr = 1. + (wri[IPP] - wri[IPR])/(2.*pbr);
+        Real fhl = 1. + (wli[IPP] - wli[IPR])/(2.*pbl);
+        Real fhr = 1. + (wri[IPP] - wri[IPR])/(2.*pbr);
         
-        Real el = wli[IPR]*0.5 + wli[IPP] + 0.5*wli[IDN]*(SQR(wli[IVX])+SQR(wli[IVY])+SQR(wli[IVZ])) + pbl;
-        Real er = wri[IPR]*0.5 + wri[IPP]  + 0.5*wri[IDN]*(SQR(wri[IVX])+SQR(wri[IVY])+SQR(wri[IVZ])) + pbr;
+        Real el = 0.5*wli[IPR] + wli[IPP] + 0.5*wli[IDN]*(SQR(wli[IVX])+SQR(wli[IVY])+SQR(wli[IVZ])) + pbl;
+        Real er = 0.5*wri[IPR] + wri[IPP] + 0.5*wri[IDN]*(SQR(wri[IVX])+SQR(wri[IVY])+SQR(wri[IVZ])) + pbr;
         
         Real mul = wli[IPP]/std::sqrt(2.*pbl);
         Real mur = wri[IPP]/std::sqrt(2.*pbr);
         
-        //--- Step 3.  Compute fast magnetosonic speed in L,R, and Roe-averaged states
+        //--- Step 3.  Compute fast magnetosonic speed in L,R
         
         Real cl = pmy_block->peos->FastMagnetosonicSpeed(wli,bxi);
         Real cr = pmy_block->peos->FastMagnetosonicSpeed(wri,bxi);
         
-        //--- Step 4.  Compute the max/min wave speeds based on L/R and Roe-averaged values
+        //--- Step 4.  Compute the max/min wave speeds based on L/R 
         
         Real al = std::min((wri[IVX] - cr),(wli[IVX] - cl));
         Real ar = std::max((wri[IVX] + cr),(wli[IVX] + cl));
@@ -90,19 +90,19 @@ void Hydro::RiemannSolver(const int kl, const int ku, const int jl, const int ju
         fl[IDN] = wli[IDN]*vxl;
         fr[IDN] = wri[IDN]*vxr;
         
-        fl[IVX] = wli[IDN]*wli[IVX]*vxl + pbl + wli[IPR] - SQR(bxi)*dpobsql;
-        fr[IVX] = wri[IDN]*wri[IVX]*vxr + pbr + wri[IPR] - SQR(bxi)*dpobsqr;
+        fl[IVX] = wli[IDN]*wli[IVX]*vxl + pbl + wli[IPP] - SQR(bxi)*fhl;
+        fr[IVX] = wri[IDN]*wri[IVX]*vxr + pbr + wri[IPP] - SQR(bxi)*fhr;
         
-        fl[IVY] = wli[IDN]*wli[IVY]*vxl - bxi*wli[IBY]*dpobsql;
-        fr[IVY] = wri[IDN]*wri[IVY]*vxr - bxi*wri[IBY]*dpobsqr;
+        fl[IVY] = wli[IDN]*wli[IVY]*vxl - bxi*wli[IBY]*fhl;
+        fr[IVY] = wri[IDN]*wri[IVY]*vxr - bxi*wri[IBY]*fhr;
         
-        fl[IVZ] = wli[IDN]*wli[IVZ]*vxl - bxi*wli[IBZ]*dpobsql;
-        fr[IVZ] = wri[IDN]*wri[IVZ]*vxr - bxi*wri[IBZ]*dpobsqr;
+        fl[IVZ] = wli[IDN]*wli[IVZ]*vxl - bxi*wli[IBZ]*fhl;
+        fr[IVZ] = wri[IDN]*wri[IVZ]*vxr - bxi*wri[IBZ]*fhr;
         
-        fl[IEN] = el*vxl + wli[IVX]*(wli[IPR] + pbl);
-        fr[IEN] = er*vxr + wri[IVX]*(wri[IPR] + pbr);
-        fl[IEN] -= bxi*(bxi*wli[IVX] + wli[IBY]*wli[IVY] + wli[IBZ]*wli[IVZ])*dpobsql;
-        fr[IEN] -= bxi*(bxi*wri[IVX] + wri[IBY]*wri[IVY] + wri[IBZ]*wri[IVZ])*dpobsqr;
+        fl[IEN] = el*vxl + wli[IVX]*(wli[IPP] + pbl);
+        fr[IEN] = er*vxr + wri[IVX]*(wri[IPP] + pbr);
+        fl[IEN] -= bxi*(bxi*wli[IVX] + wli[IBY]*wli[IVY] + wli[IBZ]*wli[IVZ])*fhl;
+        fr[IEN] -= bxi*(bxi*wri[IVX] + wri[IBY]*wri[IVY] + wri[IBZ]*wri[IVZ])*fhr;
         
         fl[IMU] = mul*vxl;
         fr[IMU] = mur*vxr;

@@ -326,7 +326,6 @@ void MeshBlock::ProblemGenerator(ParameterInput *pin) {
     for (int i=is; i<=ie; i++) {
      pfield->b.x3f(k,j,i) = (a2(k,j  ,i+1) - a2(k,j,i))/pcoord->dx1f(i) -
                             (a1(k,j+1,i  ) - a1(k,j,i))/pcoord->dx2f(j);
-      pfield->b.x3f(k,j,i) *=0;
     }
   }}
   a1.DeleteAthenaArray();
@@ -351,7 +350,6 @@ void MeshBlock::ProblemGenerator(ParameterInput *pin) {
       phydro->u(IM1,k,j,i) = mx*cos_a2*cos_a3 - my*sin_a3 - mz*sin_a2*cos_a3;
       phydro->u(IM2,k,j,i) = mx*cos_a2*sin_a3 + my*cos_a3 - mz*sin_a2*sin_a3;
       phydro->u(IM3,k,j,i) = mx*sin_a2                    + mz*cos_a2;
-      phydro->u(IM3,k,j,i) *= 0.;
       
       Real bsq = 0.5*(SQR(0.5*(pfield->b.x1f(k,j,i) + pfield->b.x1f(k,j,i+1))) +
                       SQR(0.5*(pfield->b.x2f(k,j,i) + pfield->b.x2f(k,j+1,i))) +

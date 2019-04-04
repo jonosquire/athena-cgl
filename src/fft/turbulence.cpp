@@ -181,7 +181,7 @@ void TurbulenceDriver::Generate(Real dt) {
   }
   
   // Remove the divergence
-  // Project(fv_curr_);
+  Project(fv_curr_);
   
 
   // If time correlated driving, add onto fv_old_ and copy to fv_curr_

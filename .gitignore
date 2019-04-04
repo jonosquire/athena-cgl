@@ -54,5 +54,8 @@ my_conf*
 *.tar.gz
 *.tar
 
+# Kept files that aren't useful 
+old-bits/*
+
 # Old version of athena
 athena-OU-v4/*

@@ -23,6 +23,7 @@
 #include "../hydro/hydro.hpp"
 #include "../hydro/srcterms/hydro_srcterms.hpp"
 #include "../hydro/hydro_diffusion/hydro_diffusion.hpp"
+#include "../bvals/bvals_conduction.hpp"
 #include "../mesh/mesh.hpp"
 #include "../parameter_input.hpp"
 #include "../reconstruct/reconstruction.hpp"
@@ -218,7 +219,15 @@ TimeIntegratorTaskList::TimeIntegratorTaskList(ParameterInput *pin, Mesh *pm)
     AddTimeIntegratorTask(STARTUP_INT,NONE);
     AddTimeIntegratorTask(START_ALLRECV,STARTUP_INT);
     // calculate hydro/field diffusive fluxes
-    AddTimeIntegratorTask(DIFFUSE_HYD,START_ALLRECV);
+    if (CGL_EOS && pm->fft_for_conduction==true){
+      // FFTs in heat fluxes
+      AddTimeIntegratorTask(CALC_COND_FFT,START_ALLRECV);
+      AddTimeIntegratorTask(SEND_COND_BND,CALC_COND_FFT);
+      AddTimeIntegratorTask(RECV_COND_BND,CALC_COND_FFT);
+      AddTimeIntegratorTask(COND_PHYS_BND,SEND_COND_BND|RECV_COND_BND);
+      AddTimeIntegratorTask(DIFFUSE_HYD,COND_PHYS_BND);
+    } else
+      AddTimeIntegratorTask(DIFFUSE_HYD,START_ALLRECV);
     if (MAGNETIC_FIELDS_ENABLED)
       AddTimeIntegratorTask(DIFFUSE_FLD,START_ALLRECV);
     // compute hydro fluxes, integrate hydro variables
@@ -497,6 +506,26 @@ void TimeIntegratorTaskList::AddTimeIntegratorTask(uint64_t id, uint64_t dep) {
         static_cast<enum TaskStatus (TaskList::*)(MeshBlock*,int)>
         (&TimeIntegratorTaskList::CGLCollisions);
       break;
+    case (CALC_COND_FFT):
+      task_list_[ntasks].TaskFunc=
+      static_cast<enum TaskStatus (TaskList::*)(MeshBlock*,int)>
+      (&TimeIntegratorTaskList::FFTConduction);
+      break;
+    case (SEND_COND_BND):
+      task_list_[ntasks].TaskFunc=
+      static_cast<enum TaskStatus (TaskList::*)(MeshBlock*,int)>
+      (&TimeIntegratorTaskList::SendConductionBoundary);
+      break;
+    case (RECV_COND_BND):
+      task_list_[ntasks].TaskFunc=
+      static_cast<enum TaskStatus (TaskList::*)(MeshBlock*,int)>
+      (&TimeIntegratorTaskList::ReceiveConductionBoundary);
+      break;
+    case (COND_PHYS_BND):
+      task_list_[ntasks].TaskFunc=
+      static_cast<enum TaskStatus (TaskList::*)(MeshBlock*,int)>
+      (&TimeIntegratorTaskList::ConductionPhysicalBoundary);
+      break;
 
     default:
       std::stringstream msg;
@@ -515,11 +544,18 @@ enum TaskStatus TimeIntegratorTaskList::StartAllReceive(MeshBlock *pmb, int stag
   Real dt = (stage_wghts[(stage-1)].beta)*(pmb->pmy_mesh->dt);
   Real time = pmb->pmy_mesh->time+dt;
   pmb->pbval->StartReceivingAll(time);
+  if (CGL_EOS && pmb->pmy_mesh->fft_for_conduction)
+    pmb->pcondbval->StartReceivingConduction();
+  
   return TASK_SUCCESS;
 }
 
 enum TaskStatus TimeIntegratorTaskList::ClearAllBoundary(MeshBlock *pmb, int stage) {
   pmb->pbval->ClearBoundaryAll();
+  
+  if (CGL_EOS && pmb->pmy_mesh->fft_for_conduction)
+    pmb->pcondbval->ClearBoundaryConduction();
+      
   return TASK_SUCCESS;
 }
 
@@ -660,7 +696,7 @@ enum TaskStatus TimeIntegratorTaskList::HydroSourceTerms(MeshBlock *pmb, int sta
 enum TaskStatus TimeIntegratorTaskList::HydroDiffusion(MeshBlock *pmb, int stage) {
   Hydro *ph=pmb->phydro;
   Field *pf=pmb->pfield; // Added J Squire -- necessary for anisotropic diffusion
-
+  
 // return if there are no diffusion to be added
   if (ph->phdif->hydro_diffusion_defined == false) return TASK_NEXT;
 
@@ -678,13 +714,13 @@ enum TaskStatus TimeIntegratorTaskList::HydroDiffusion(MeshBlock *pmb, int stage
 
 enum TaskStatus TimeIntegratorTaskList::FieldDiffusion(MeshBlock *pmb, int stage) {
   Field *pf=pmb->pfield;
-
 // return if there are no diffusion to be added
   if (pf->pfdif->field_diffusion_defined == false) return TASK_NEXT;
 
   // *** this must be changed for the RK3 integrator
   if(stage <= nstages) {
     pf->pfdif->CalcFieldDiffusionEMF(pf->b,pf->bcc,pf->e);
+    
   } else {
     return TASK_FAIL;
   }
@@ -909,6 +945,53 @@ enum TaskStatus TimeIntegratorTaskList::CGLCollisions(MeshBlock *pmb, int stage)
   } else {
     return TASK_FAIL;
   }
+}
+
+enum TaskStatus TimeIntegratorTaskList::FFTConduction(MeshBlock *pmb, int stage) {
+  if (stage <= nstages) {
+    Hydro *ph=pmb->phydro;
+    Field *pf=pmb->pfield;
+    ph->phdif->CalcParallelGradientsFFT(ph->w, ph->u, pf->b, pf->bcc);
+  } else {
+    return TASK_FAIL;
+  }
+  return TASK_SUCCESS;
+}
+
+enum TaskStatus TimeIntegratorTaskList::SendConductionBoundary(MeshBlock *pmb, int stage) {
+  
+  if (stage <= nstages) {
+    pmb->pcondbval->SendConductionBoundaryBuffers(pmb->phydro->phdif->dprl_cond);
+  } else {
+    return TASK_FAIL;
+  }
+  return TASK_SUCCESS;
+}
+
+enum TaskStatus TimeIntegratorTaskList::ReceiveConductionBoundary(MeshBlock *pmb, int stage) {
+    bool ret;
+    if (stage <= nstages) {
+      ret= (pmb->pcondbval->ReceiveConductionBoundaryBuffers(pmb->phydro->phdif->dprl_cond));
+    } else {
+      return TASK_FAIL;
+    }
+  
+    if (ret==true) {
+      return TASK_NEXT;
+    } else {
+      return TASK_FAIL;
+    }
+}
+
+enum TaskStatus TimeIntegratorTaskList::ConductionPhysicalBoundary(MeshBlock *pmb, int stage) {
+  
+  if (stage <= nstages) {
+    pmb->pcondbval->ApplyPhysicalBoundaries();
+  } else {
+    return TASK_FAIL;
+  }
+  
+  return TASK_NEXT;
 }
 
 enum TaskStatus TimeIntegratorTaskList::UserWork(MeshBlock *pmb, int stage) {

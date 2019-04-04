@@ -117,6 +117,7 @@ public:
   void RetrieveResult(AthenaArray<Real> &dst, int ns, int ngh,
                       LogicalLocation loc, RegionSize bsize);
   virtual void ApplyKernel(int mode);
+  virtual void ApplyKernel(int mode, Real *params);
 
   int64_t GetIndex(const int i, const int j, const int k);
   int64_t GetIndex(const int i, const int j, const int k, AthenaFFTIndex *pidx);

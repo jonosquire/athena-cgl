@@ -1,42 +1,63 @@
 function simpleImagePlot()
 
 
-folder = '~/Research/athena/wave-tests/cgl';
+folder = '~/Research/athena/wave-tests/mhd';
 
 file = 'LinWave'; % Name of output
 output_id = 2; % Output id (set in input file)
-nums = 0:100;
+nums = 0:40;
 
-filename = @(n,oid) [folder '/' file '.block0.out' num2str(oid) '.'  sprintf('%05d',n) '.vtk'];
+filename = @(n,oid) [folder '/' file '.block0.out' num2str(oid) '.'  sprintf('%05d',n) '.vtk'];readfunc = @(file) readVTKpp(file);
+filename = @(n,oid) [folder '/' file '.out' num2str(oid) '.'  sprintf('%05d',n) '.athdf'];readfunc = @(file) readHDF5(file);
 
 
-lims = 0.5*[-1 1];
-dpstore = [];ts = [];
+dpstore = [];estore=[];ts = [];
+lims = 0.3*[-1 1];
 for nnn = nums
-    V = readVTKpp(filename(nnn,output_id));
+    V = readfunc(filename(nnn,output_id));
     ar = length(V.x)/length(V.y);
     
-%     imagesc(V.x,V.y,V.Bcc2(:,:,1).',lims)
-%     pbaspect([ar 1 1])
-%     title(['t = ' num2str(V.t)]);    colorbar
-
-    oneD = @(a) a(:,8,8);%@(a) mean(mean(a,2),3);
+%     tp = @(f) f.'-mean(mean(mean(f)));
+%     vars = {'vel3'};
+%     for kkk=1:length(vars)
+%         subplot(1,length(vars),kkk)
+%         imagesc(V.x,V.y,tp(V.(vars{kkk})(:,:,1)))
+%         pbaspect([ar 1 1])
+%         title(['t = ' num2str(V.t)]);    colorbar
+%     end
+    
+    if length(V.y)>1
+        oneD = @(a) a(:,1,1);%@(a) mean(mean(a,2),3);
+    else 
+        oneD = @(a) a;%@(a) mean(mean(a,2),3);
+    end
     subplot(211)
-    plot(V.x,oneD(V.Bcc2),V.x,oneD(V.vel2))
+    plot(V.x,oneD(V.vel2),V.x,oneD(V.vel3))
     hold on;
     ax = gca;ax.ColorOrderIndex = 1;
-    plot(V.x,oneD(V.Bcc3),'--',V.x,oneD(V.vel3),'--')
+    plot(V.x,oneD(V.Bcc2),'--',V.x,oneD(V.Bcc3),'--')
     hold off
     ylim(lims)
     title(['t = ' num2str(V.t)])
-    subplot(212)
-    plot(V.x,oneD((V.pprp-V.pprl)./(V.Bcc1.^2+ V.Bcc2.^2+V.Bcc3.^2)))
-    ylim([-2 1])
+%     subplot(212)
+%     if isfield(V,'pprp')
+%         plot(V.x,oneD((V.pprp-V.pprl)./(V.Bcc1.^2+ V.Bcc2.^2+V.Bcc3.^2)))
+%     end
+%     ylim([-2 1])
     
-    dpstore = [dpstore mean(mean(mean(V.pprp-V.pprl)))];
+%     dpstore = [dpstore mean(mean(mean(V.pprp-V.pprl)./(V.Bcc1.^2+ V.Bcc2.^2+V.Bcc3.^2)))];
     ts = [ts V.t];
+    estore =[estore mean(mean(mean(0.5*V.Bcc2.^2 + 0.5*V.rho.*V.vel2.^2)))];
     
     drawnow
-    ginput(1);
+%     pause(0.1)
+%     ginput(1);
 end
-% semilogy(ts,dpstore,'r',ts,0.3*exp(-0.1*ts),':k','Linewidth',3)
+% semilogy(ts,-dpstore,'r',ts,0.5*exp(-1*ts),':k','Linewidth',3)
+subplot(212)
+hold on
+omA=2*pi;tp0onuc=3/10;
+semilogy(ts, estore, ts, estore(1)./(1+estore(1)*2*tp0onuc*omA^2*ts))
+
+
+end

@@ -28,7 +28,8 @@ EquationOfState::EquationOfState(MeshBlock *pmb, ParameterInput *pin) {
 //  gamma_ = pin->GetReal("hydro", "gamma");
   density_floor_  = pin->GetOrAddReal("hydro", "dfloor", std::sqrt(1024*(FLT_MIN)));
   pressure_floor_ = pin->GetOrAddReal("hydro", "pfloor", std::sqrt(1024*(FLT_MIN)));
-  magnetic_mag_floor_ = pin->GetOrAddReal("hydro", "Bfloor", std::sqrt(1024*(FLT_MIN)));
+  magnetic_mag_floor_ = pin->GetOrAddReal("hydro", "bmagfloor", std::sqrt(1024*(FLT_MIN)));
+  fh_hlld_floor_ = pin->GetOrAddReal("hydro", "fh_hlld_floor", 0.1);
   // Collisions and limiters
   collision_freq_ = pin->GetOrAddReal("problem", "nu_coll", 0.0);
   firehose_limiter_ = pin->GetOrAddInteger("problem", "firehose_limiter", 0);
@@ -184,9 +185,9 @@ Real EquationOfState::FastMagnetosonicSpeed(const Real prim[(NWAVE)], const Real
   Real pprp = prim[IPP];
   Real pprl = prim[IPR];
   Real qsq = bx2 + bprp2 + 2*pprp + (2.*pprl - pprp)*bhatx2;
-  return std::sqrt( 0.5*(qsq + std::sqrt(qsq*qsq + 4.*pprp*pprp*(1. - bhatx2)*bhatx2
+  return std::sqrt( 0.5*(qsq + std::sqrt(fabs(qsq*qsq + 4.*pprp*pprp*(1. - bhatx2)*bhatx2
                                   - 12.*pprl*pprp*bhatx2*(2.-bhatx2)
-                                + 12.*pprl*pprl*bhatx2*bhatx2 - 12.*bx2*pprl))/prim[IDN] );
+                                + 12.*pprl*pprl*bhatx2*bhatx2 - 12.*bx2*pprl)))/prim[IDN] );
 }
 
 //----------------------------------------------------------------------------------------

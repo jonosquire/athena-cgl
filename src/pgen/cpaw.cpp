@@ -39,7 +39,7 @@
 
 // Parameters which define initial solution -- made global so that they can be shared
 // with functions A1,2,3 which compute vector potentials
-static Real den, pres, gm1, b_par, b_perp, v_perp, v_par, pres_aniso;
+static Real den, pres, gm1, b_par, b_perp, v_perp, v_par, pprp, pprl;
 static Real ang_2, ang_3; // Rotation angles about the y and z' axis
 static Real fac, sin_a2, cos_a2, sin_a3, cos_a3;
 static Real lambda, k_par; // Wavelength, 2*PI/wavelength
@@ -70,12 +70,14 @@ void Mesh::InitUserMeshData(ParameterInput *pin) {
   ang_2 = pin->GetOrAddReal("problem","ang_2",-999.9);
   ang_3 = pin->GetOrAddReal("problem","ang_3",-999.9);
   Real dir = pin->GetOrAddReal("problem","dir",1); // right(1)/left(2) polarization, just B(0)
+
   if (NON_BAROTROPIC_EOS) {
     Real gam   = pin->GetReal("hydro","gamma");
     gm1 = (gam - 1.0);
   }
-  pres = pin->GetReal("problem","pres");
-  pres_aniso = pin->GetOrAddReal("problem","delta_p",0.0);
+  pres = pin->GetOrAddReal("problem","pres",1.0);
+  pprp = pin->GetOrAddReal("problem","pprp",1.0);
+  pprl = pin->GetOrAddReal("problem","pprl",1.0);
   den = 1.0;
 
   Real x1size = mesh_size.x1max - mesh_size.x1min;
@@ -324,6 +326,7 @@ void MeshBlock::ProblemGenerator(ParameterInput *pin) {
     for (int i=is; i<=ie; i++) {
      pfield->b.x3f(k,j,i) = (a2(k,j  ,i+1) - a2(k,j,i))/pcoord->dx1f(i) -
                             (a1(k,j+1,i  ) - a1(k,j,i))/pcoord->dx2f(j);
+      pfield->b.x3f(k,j,i) *=0;
     }
   }}
   a1.DeleteAthenaArray();
@@ -348,6 +351,7 @@ void MeshBlock::ProblemGenerator(ParameterInput *pin) {
       phydro->u(IM1,k,j,i) = mx*cos_a2*cos_a3 - my*sin_a3 - mz*sin_a2*cos_a3;
       phydro->u(IM2,k,j,i) = mx*cos_a2*sin_a3 + my*cos_a3 - mz*sin_a2*sin_a3;
       phydro->u(IM3,k,j,i) = mx*sin_a2                    + mz*cos_a2;
+      phydro->u(IM3,k,j,i) *= 0.;
       
       Real bsq = 0.5*(SQR(0.5*(pfield->b.x1f(k,j,i) + pfield->b.x1f(k,j,i+1))) +
                       SQR(0.5*(pfield->b.x2f(k,j,i) + pfield->b.x2f(k,j+1,i))) +
@@ -358,8 +362,8 @@ void MeshBlock::ProblemGenerator(ParameterInput *pin) {
         phydro->u(IEN,k,j,i) = pres/gm1 + bsq + ken;
       }
       if (CGL_EOS) {
-        phydro->u(IMU,k,j,i) = (pres + ONE_3RD*pres_aniso)/std::sqrt(2.*bsq);
-        phydro->u(IEN,k,j,i) = 1.5*pres + ken + bsq;
+        phydro->u(IMU,k,j,i) = (pprp)/std::sqrt(2.*bsq);
+        phydro->u(IEN,k,j,i) = pprp + 0.5*pprl + ken + bsq;
       }
     }
   }}

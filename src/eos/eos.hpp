@@ -113,12 +113,14 @@ public:
   Real GetPressureFloor() const {return pressure_floor_;}
   Real GetBFieldFloor() const {return magnetic_mag_floor_;}
   Real GetCollisionFreq() const {return collision_freq_;}
+  Real GetFHFloor() const {return fh_hlld_floor_;}
 
 private:
   MeshBlock *pmy_block_;                   // ptr to MeshBlock containing this EOS
   Real iso_sound_speed_, gamma_;           // isothermal Cs, ratio of specific heats
   Real density_floor_, pressure_floor_;    // density and pressure floors
   Real magnetic_mag_floor_;                // Magnetic field strength floor
+  Real fh_hlld_floor_;                     // Limit of 1+∆p/B^2 to switch to HLLE solver
   Real collision_freq_;                    // Collision frequency in CGL
   Real limiting_collision_freq_;           // Collision freq. used in firehose/mirror limiters
   int firehose_limiter_, mirror_limiter_; // Mirror/firehose limiter on delta_p

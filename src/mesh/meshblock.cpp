@@ -30,6 +30,8 @@
 #include "../globals.hpp"
 #include "../gravity/gravity.hpp"
 #include "../hydro/hydro.hpp"
+#include "../hydro/hydro_diffusion/hydro_diffusion.hpp"
+#include "../bvals/bvals_conduction.hpp"
 #include "../parameter_input.hpp"
 #include "../utils/buffer_utils.hpp"
 #include "../reconstruct/reconstruction.hpp"
@@ -132,6 +134,12 @@ MeshBlock::MeshBlock(int igid, int ilid, LogicalLocation iloc, RegionSize input_
   phydro = new Hydro(this, pin);
   if (MAGNETIC_FIELDS_ENABLED) pfield = new Field(this, pin);
   peos = new EquationOfState(this, pin);
+  
+  // Conduction using FFT in Landau fluid model
+  if (CGL_EOS && phydro->phdif->using_fft_for_conduction){
+    pcondbval = new ConductionBoundaryValues(this,input_bcs);
+  }
+    
 
   // Create user mesh data
   InitUserMeshBlockData(pin);
@@ -230,6 +238,12 @@ MeshBlock::MeshBlock(int igid, int ilid, Mesh *pm, ParameterInput *pin,
   if (MAGNETIC_FIELDS_ENABLED) pfield = new Field(this, pin);
   peos = new EquationOfState(this, pin);
   InitUserMeshBlockData(pin);
+  
+  // Conduction using FFT in Landau fluid model
+  if (CGL_EOS && phydro->phdif->using_fft_for_conduction){
+    pcondbval = new ConductionBoundaryValues(this,input_bcs);
+  }
+  
 
   int os=0;
   // load hydro and field data
@@ -288,11 +302,13 @@ MeshBlock::~MeshBlock() {
   delete precon;
   if (pmy_mesh->multilevel == true) delete pmr;
 
+  if (CGL_EOS && pmy_mesh->fft_for_conduction) delete pcondbval;
   delete phydro;
   if (MAGNETIC_FIELDS_ENABLED) delete pfield;
   delete peos;
   if (SELF_GRAVITY_ENABLED) delete pgrav;
   if (SELF_GRAVITY_ENABLED==1) delete pgbval;
+  
 
   // delete user output variables array
   if (nuser_out_var > 0) {

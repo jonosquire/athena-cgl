@@ -6,6 +6,7 @@
 //  \brief Class to implement diffusion processes in the hydro equations
 
 // C/C++ headers
+#include <cmath>      // sqrt()
 #include <algorithm>  // min()
 #include <cfloat>     // FLT_MAX
 #include <iostream>
@@ -30,6 +31,7 @@ HydroDiffusion::HydroDiffusion(Hydro *phyd, ParameterInput *pin) {
   pmb_ = pmy_hydro_->pmy_block;
   pco_ = pmb_->pcoord;
   hydro_diffusion_defined = false;
+  using_fft_for_conduction = false;
   std::stringstream msg;
 
   int ncells1 = pmb_->block_size.nx1 + 2*(NGHOST);
@@ -38,7 +40,6 @@ HydroDiffusion::HydroDiffusion(Hydro *phyd, ParameterInput *pin) {
   if (pmb_->block_size.nx3 > 1) ncells3 = pmb_->block_size.nx3 + 2*(NGHOST);
 
   // Check if viscous process.
-  
   
   nu_iso = pin->GetOrAddReal("problem","nu_iso",0.0); // iso viscosity
   nu_aniso = pin->GetOrAddReal("problem","nu_aniso",0.0); // aniso viscosity
@@ -56,17 +57,11 @@ HydroDiffusion::HydroDiffusion(Hydro *phyd, ParameterInput *pin) {
       throw std::runtime_error(msg.str().c_str());
       return;
     }
-    if (nu_aniso > 0.0 && pmb_->block_size.nx3 == 1) {
-      msg << "### FATAL ERROR in HydroDiffusion::HydroDiffusion" << std::endl
-      << "Anisotropic viscosity not yet set up for 1D or 2D" << std::endl;
-      throw std::runtime_error(msg.str().c_str());
-      return;
-    }
     if (nu_aniso > 0.0 && CGL_EOS) {
-      msg << "### ERROR in HydroDiffusion::HydroDiffusion" << std::endl
-      << "It doesn't make much sense to use anisotropic diffusion and CGL" << std::endl;
-      throw std::runtime_error(msg.str().c_str());
-      return;
+      std::cout << "### WARNING in HydroDiffusion::HydroDiffusion" << std::endl
+      << "It doesn't make much sense to use anisotropic viscosity in CGL, "
+      << "setting nu_aniso=0" << std::endl;
+      nu_aniso = 0.;
     }
     hydro_diffusion_defined = true;
     // Allocate memory for fluxes.
@@ -122,40 +117,47 @@ HydroDiffusion::HydroDiffusion(Hydro *phyd, ParameterInput *pin) {
   
   // Check if thermal conduction in CGL model.
   // This is implemented separately from MHD because of its different form.
-  // Set kl_lf=kL to use a constant kL in the 1/|k| operator. Or set kl_lf=-1 to
-  // evaluate 1/|k| as 1/|k_0| with a Fourier transform (where k_0 is direction of
+  // Set kl_lf=kL to use a constant kL in the 1/|k_prl| operator. Or set fft_conduction=1 to
+  // evaluate 1/|k_prl| as 1/|B0.k| with a Fourier transform (where B0 is direction of
   // mean magnetic field). This is the better option.
-  using_fft_for_conduction_ = false;
   if (CGL_EOS){
     // See Sharma et al. 2006
     kl_lf = pin->GetOrAddReal("problem","kl_landau",0.0); // 0.0 gives no heat flux (pure CGL)
-    if (kl_lf != 0.0) {
-      if (pmb_->block_size.nx3 == 1) {
-        msg << "### FATAL ERROR in HydroDiffusion::HydroDiffusion" << std::endl
-        << "Landau-Fluid heat fluxes are currently only set up for 3D" << std::endl;
-        throw std::runtime_error(msg.str().c_str());
-        return;
-      }
+    int fft_conduct = pin->GetOrAddInteger("problem","fft_conduct",0);
+    if (fft_conduct > 0)
+      using_fft_for_conduction = true;
+    if (kl_lf > 0.0 || using_fft_for_conduction==true) {
       hydro_diffusion_defined = true;
       cndflx[X1DIR].NewAthenaArray(2,ncells3,ncells2,ncells1+1);
       cndflx[X2DIR].NewAthenaArray(2,ncells3,ncells2+1,ncells1);
       cndflx[X3DIR].NewAthenaArray(2,ncells3+1,ncells2,ncells1);
-      // tmp storage of Tprp, Tprl, and |B|
-      pprl_rho_.NewAthenaArray(ncells3,ncells2,ncells1);
-      pprp_rho_.NewAthenaArray(ncells3,ncells2,ncells1);
+      // tmp storage for field magnitude
       bmagcc_.NewAthenaArray(ncells3,ncells2,ncells1);
-      // Use kappa variable to store kappa for timestep (see App. A2 of Sharma+06)
-      kappa.NewAthenaArray(ncells3,ncells2,ncells1);
-      // Fourier transform is set up in mesh if needed.
-      if (kl_lf < 0.0){
-        using_fft_for_conduction_ = true;
-        std::cout << "Setting kL=100.\n";
-        kl_lf = 100.;
+      if (using_fft_for_conduction) {
+        // Parallel gradients of Tprl, Tprp and |B|. Indices ICPR ICPP ICBM
+        dprl_cond.NewAthenaArray(3,ncells3,ncells2,ncells1);
+      } else {
+        // Tmp storage for Tprp and Tprl if kl_lf>0
+        dprl_cond.NewAthenaArray(2,ncells3,ncells2,ncells1);
+        csprl_iloop_.NewAthenaArray(ncells1); // Used to store cs for CFL calculation
+        rhomean_iloop_.NewAthenaArray(ncells1);
       }
+      // For initial time step calculation
+      csprl_ = 1.0;
+      rhomean_ = 1.0;
+      nu_c_ = 0.0;
+      bhat_mean_ = new Real[3]; // For CFL limit
+      bhat_mean_[0]=1.;bhat_mean_[1]=0.;bhat_mean_[2]=0.;
+      // FIX UP!!!!
+      
+      // Useful Constants
+      sqrt_twopi_ = std::sqrt(2.*PI);
+      threepi_m_eight_ = 3.*PI - 8.;
     }
   } else { // CGL
     kl_lf = 0.0;
   }
+
 
   if (hydro_diffusion_defined) {
     dx1_.NewAthenaArray(ncells1);
@@ -190,14 +192,18 @@ HydroDiffusion::~HydroDiffusion() {
     cndflx[X2DIR].DeleteAthenaArray();
     cndflx[X3DIR].DeleteAthenaArray();
   }
-  if (kl_lf != 0.0){
+  if (kl_lf > 0.0 || using_fft_for_conduction==true){
     cndflx[X1DIR].DeleteAthenaArray();
     cndflx[X2DIR].DeleteAthenaArray();
     cndflx[X3DIR].DeleteAthenaArray();
-    pprl_rho_.DeleteAthenaArray();
-    pprp_rho_.DeleteAthenaArray();
+    dprl_cond.DeleteAthenaArray();
     bmagcc_.DeleteAthenaArray();
-    kappa.DeleteAthenaArray();
+    delete [] bhat_mean_;
+    if (using_fft_for_conduction) { 
+    } else {
+      csprl_iloop_.DeleteAthenaArray();
+      rhomean_iloop_.DeleteAthenaArray();
+    }
   }
   if (hydro_diffusion_defined) {
     dx1_.DeleteAthenaArray();
@@ -229,11 +235,16 @@ void HydroDiffusion::CalcHydroDiffusionFlux(const AthenaArray<Real> &prim,
   if (kappa_iso > 0.0) ThermalFlux_iso(prim, cons, cndflx);
   if (kappa_aniso > 0.0) ThermalFlux_aniso(prim, cons, cndflx);
 
-  if (CGL_EOS && kl_lf != 0.0){
-    ClearHydroFlux(cndflx);
-    HeatFlux_LandauFluid(prim, cons, cndflx, b, bcc);
+  if (CGL_EOS){
+    if ( using_fft_for_conduction==true ) {
+      ClearHydroFlux(cndflx);
+      ThermalFlux_anisoCGLFFT(prim, cons, cndflx, b, bcc);
+    } else if (kl_lf > 0.0) {
+      ClearHydroFlux(cndflx);
+      ThermalFlux_anisoCGL(prim, cons, cndflx, b, bcc);
+    }
   }
-
+  
   return;
 }
 
@@ -305,10 +316,10 @@ void HydroDiffusion::AddHydroDiffusionFlux(AthenaArray<Real> *flux_src,
 
 
 //----------------------------------------------------------------------------------------
-//! \fn void HydroDiffusion::AddHydroDiffusionFlux
+//! \fn void HydroDiffusion::AddHydroDiffusionCGLHeatFlux
 //  \brief Adds Landau-fluid heat fluxes to E and mu
 
-void HydroDiffusion::AddHydroDiffusionLFHeatFlux(AthenaArray<Real> *flux_src,
+void HydroDiffusion::AddHydroDiffusionCGLHeatFlux(AthenaArray<Real> *flux_src,
                                                  AthenaArray<Real> *flux_des){
   
   int is = pmb_->is; int js = pmb_->js; int ks = pmb_->ks;
@@ -448,14 +459,44 @@ void HydroDiffusion::NewHydroDiffusionDt(Real &dt_vis, Real &dt_cnd) {
 #pragma omp simd
         for (int i=is; i<=ie; ++i) kappa_t(i) += kappa(ANI,k,j,i);
       }
-      if (kl_lf != 0.0){
+      if (kl_lf > 0.0 && using_fft_for_conduction==false){
 #pragma omp simd
-        for (int i=is; i<=ie; ++i) kappa_t(i) += kappa(k,j,i);
-        // kappa(k,j,i) is set in the i-direction loop of HeatFlux_LandauFluid
+        for (int i=is; i<=ie; ++i) {
+          kappa_t(i) = 8.*csprl_*csprl_*rhomean_ /
+              (2.*sqrt_twopi_*csprl_*kl_lf + threepi_m_eight_*nu_c_);
+        }
       }
+      
       pmb_->pcoord->CenterWidth1(k,j,is,ie,len);
       pmb_->pcoord->CenterWidth2(k,j,is,ie,dx2);
       pmb_->pcoord->CenterWidth3(k,j,is,ie,dx3);
+      
+      if (using_fft_for_conduction==true){ // Find k_prl max, store in kappa_t
+        if (pmb_->block_size.nx3 > 1){ // 3D
+#pragma omp simd
+          for (int i=is; i<=ie; ++i) {
+            Real kprl_max = 2.*PI / (bhat_mean_[0]*len(i) + bhat_mean_[1]*dx2(i) +
+                          bhat_mean_[2]*dx3(i));
+            kappa_t(i) = 8.*csprl_*csprl_*rhomean_ /
+                  (2.*sqrt_twopi_*csprl_*kprl_max + threepi_m_eight_*nu_c_);
+          }
+        } else if (pmb_->block_size.nx2 > 1) { // 2D
+#pragma omp simd
+          for (int i=is; i<=ie; ++i) {
+            Real kprl_max = 2.*PI / (bhat_mean_[0]*len(i) + bhat_mean_[1]*dx2(i) );
+            kappa_t(i) = 8.*csprl_*csprl_*rhomean_ /
+                        (2.*sqrt_twopi_*csprl_*kprl_max + threepi_m_eight_*nu_c_);
+          }
+        } else  {
+#pragma omp simd
+          for (int i=is; i<=ie; ++i) { // 1D
+            Real kprl_max = 2.*PI / (bhat_mean_[0]*len(i) );
+            kappa_t(i) = 8.*csprl_*csprl_*rhomean_ /
+                        (2.*sqrt_twopi_*csprl_*kprl_max + threepi_m_eight_*nu_c_);
+          }
+        }
+      }
+      
 #pragma omp simd
       for (int i=is; i<=ie; ++i) {
         len(i) = (pmb_->block_size.nx2 > 1) ? std::min(len(i),dx2(i)):len(i);
@@ -466,10 +507,15 @@ void HydroDiffusion::NewHydroDiffusionDt(Real &dt_vis, Real &dt_cnd) {
           dt_vis = std::min(dt_vis, static_cast<Real>(SQR(len(i))
                                      *fac/(nu_t(i)+TINY_NUMBER)));
       }
-      if ((kappa_iso > 0.0) || (kappa_aniso > 0.0) || (kl_lf != 0.0)) {
+      if ((kappa_iso > 0.0) || (kappa_aniso > 0.0)) {
         for (int i=is; i<=ie; ++i)
           dt_cnd = std::min(dt_cnd, static_cast<Real>(SQR(len(i))
                                   *fac/(kappa_t(i)+TINY_NUMBER)));
+      }
+      if (kl_lf > 0.0 || using_fft_for_conduction==true) {
+        for (int i=is; i<=ie; ++i)
+          dt_cnd = std::min(dt_cnd, static_cast<Real>(SQR(len(i))
+                                    *fac/(kappa_t(i)+TINY_NUMBER)));
       }
     }
   }

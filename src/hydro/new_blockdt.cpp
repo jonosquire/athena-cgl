@@ -75,7 +75,6 @@ Real Hydro::NewBlockTimeStep(void) {
           }
 
           if (MAGNETIC_FIELDS_ENABLED) {
-
             Real bx = bcc(IB1,k,j,i) + fabs(b_x1f(k,j,i)-bcc(IB1,k,j,i));
             wi[IBY] = bcc(IB2,k,j,i);
             wi[IBZ] = bcc(IB3,k,j,i);
@@ -110,6 +109,7 @@ Real Hydro::NewBlockTimeStep(void) {
         Real& dt_1 = dt1(i);
         min_dt = std::min(min_dt,dt_1);
       }
+      
 
       // if grid is 2D/3D, compute minimum of (v2 +/- C)
       if (pmb->block_size.nx2 > 1) {

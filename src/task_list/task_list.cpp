@@ -8,6 +8,7 @@
 
 // needed for vector of pointers in DoTaskListOneStage()
 #include <vector>
+#include <iostream> // DELETE
 
 // Athena++ classes headers
 #include "../athena.hpp"
@@ -44,6 +45,7 @@ enum TaskListStatus TaskList::DoAllAvailableTasks(MeshBlock *pmb, int stage,
   if (ts.num_tasks_left==0) return TL_NOTHING_TO_DO;
 
   for (int i=ts.indx_first_task; i<ntasks; i++) {
+//
     Task &taski=task_list_[i];
 
     if ((taski.task_id & ts.finished_tasks) == 0LL) { // task not done

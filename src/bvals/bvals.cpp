@@ -27,6 +27,7 @@
 #include "../globals.hpp"
 #include "../gravity/mggravity.hpp"
 #include "../hydro/hydro.hpp"
+#include "../hydro/hydro_diffusion/hydro_diffusion.hpp"
 #include "../mesh/mesh.hpp"
 #include "../mesh/mesh_refinement.hpp"
 #include "../multigrid/multigrid.hpp"

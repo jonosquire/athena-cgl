@@ -19,6 +19,7 @@ class Mesh;
 class MeshBlock;
 class TaskList;
 class GravitySolverTaskList;
+class ConductionSolverTaskList;
 
 // return codes for functions working on individual Tasks and TaskList
 enum TaskStatus {TASK_FAIL, TASK_SUCCESS, TASK_NEXT};
@@ -69,6 +70,7 @@ class TaskState {
 class TaskList {
 friend class TimeIntegratorTaskList;
 friend class GravitySolverTaskList;
+friend class ConductionSolverTaskList;
 public:
   explicit TaskList(Mesh *pm);
   virtual ~TaskList();
@@ -125,6 +127,11 @@ public:
   enum TaskStatus CalcDiffusivity(MeshBlock *pmb, int stage);
   
   enum TaskStatus CGLCollisions(MeshBlock *pmb, int stage);
+  
+  enum TaskStatus FFTConduction(MeshBlock *pmb, int stage);
+  enum TaskStatus SendConductionBoundary(MeshBlock *pmb, int stage);
+  enum TaskStatus ReceiveConductionBoundary(MeshBlock *pmb, int stage);
+  enum TaskStatus ConductionPhysicalBoundary(MeshBlock *pmb, int stage);
 
   enum TaskStatus HydroSend(MeshBlock *pmb, int stage);
   enum TaskStatus FieldSend(MeshBlock *pmb, int stage);
@@ -232,6 +239,11 @@ namespace HydroIntegratorTaskNames {
   const uint64_t CALC_DIFFUSIVITY=1LL<<55;
   
   const uint64_t COLLISIONS=1LL<<56;
+  
+  const uint64_t CALC_COND_FFT=1LL<<57;
+  const uint64_t SEND_COND_BND=1LL<<58;
+  const uint64_t RECV_COND_BND=1LL<<59;
+  const uint64_t COND_PHYS_BND=1LL<<60;
 }; // namespace HydroIntegratorTaskNames
 
 #endif // TASK_LIST_TASK_LIST_HPP_

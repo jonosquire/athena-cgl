@@ -65,6 +65,7 @@
 #include "../field/field.hpp"
 #include "../gravity/gravity.hpp"
 #include "../hydro/hydro.hpp"
+#include "../hydro/hydro_diffusion/hydro_diffusion.hpp"
 #include "../mesh/mesh.hpp"
 #include "../parameter_input.hpp"
 #include "outputs.hpp"
@@ -376,6 +377,18 @@ void OutputType::LoadOutputData(MeshBlock *pmb) {
       num_vars_++;
     }
   }
+//  // Fourier transform bits for heat fluxes DELETE!!
+//  if (CGL_EOS) {
+//    if (output_params.variable.compare("dprl") == 0 ||
+//        output_params.variable.compare("prim") == 0) {
+//      pod = new OutputData;
+//      pod->type = "SCALARS";
+//      pod->name = "dprl";
+//      pod->data.InitWithShallowSlice(phyd->phdif->dprl_cond,4,ICPR,1);
+//      AppendOutputDataNode(pod);
+//      num_vars_++;
+//    }
+//  }
   
   // perpendicular pressure
   if (CGL_EOS) {

@@ -20,9 +20,10 @@ class ParameterInput;
 class Coordinates;
 class FFTBlock;
 class FFTDriver;
+class ConductionSolverTaskList;
 
 //! \class FFTConduction
-//  \brief FFT solver for 1/|k| operator on each block
+//  \brief FFT solver for 1/|B0.k| operator on each block
 
 class FFTConduction : public FFTBlock {
 public:
@@ -30,20 +31,22 @@ public:
              RegionSize msize, RegionSize bsize)
   : FFTBlock(pfd, iloc, igid, msize, bsize) {}
   ~FFTConduction() {};
-  void ApplyKOperator(void);
+  void ApplyKernel(int mode, Real *params);
 };
 
 
 //! \class FFTDriver
-//  \brief FFT solver for 1/|k| operator
+//  \brief FFT solver for 1/|B0.k| operator
 
 class FFTConductionDriver : public FFTDriver{
 public:
   FFTConductionDriver(Mesh *pm, ParameterInput *pin);
-  ~FFTConductionDriver() {};
-  void Solve(void);
-  
-private:
+  ~FFTConductionDriver();
+  void Solve( int mode, Real *bmean);
+    
+  // Task list for sending/receiving boundaries.
+//private:
+//  ConductionSolverTaskList *cond_tlist_;
 };
 
 #endif // HYDRO_HYDRO_DIFFUSION_FFT_CONDUCTION_HPP_

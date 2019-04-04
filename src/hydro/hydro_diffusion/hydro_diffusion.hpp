@@ -50,10 +50,15 @@ public:
   AthenaArray<Real> cndflx[3]; // thermal stress tensor
   AthenaArray<Real> kappa; // conduction array
   
-  // Landau-fluid |k| for evaluating heat fluxes (todo, kl_lf==-1 uses Fourier method).
-  Real kl_lf; // See Sharma et al. 2006, equations (13) and (14)
-  bool UsingFFTForConduction(){return using_fft_for_conduction_;};
+  // Storage for parallel gradients in LF calculation
+  AthenaArray<Real> dprl_cond;
   
+  // Landau-fluid |k| for evaluating heat fluxes
+  // If param fft_conduct=1, enables Fourier calculation of 1/|k_prl| ~ 1/|B0.k| in
+  //    CalcParallelHeatFluxesFFT. Otherwise, uses 1/|k_prl|=1/kl_lf, with kl_lf set with
+  //    kl_landau, as a standard diffusion operator
+  Real kl_lf; // See Sharma et al. 2006, equations (13) and (14)
+  bool using_fft_for_conduction;
 
   // functions
   void CalcHydroDiffusionFlux(const AthenaArray<Real> &p, const AthenaArray<Real> &c,
@@ -62,7 +67,7 @@ public:
   void AddHydroDiffusionFlux(AthenaArray<Real> *flx_src, AthenaArray<Real> *flx_des);
   void AddHydroDiffusionEnergyFlux(AthenaArray<Real> *flux_src,
                                    AthenaArray<Real> *flux_des);
-  void AddHydroDiffusionLFHeatFlux(AthenaArray<Real> *flux_src,
+  void AddHydroDiffusionCGLHeatFlux(AthenaArray<Real> *flux_src,
                                    AthenaArray<Real> *flux_des);
   void ClearHydroFlux(AthenaArray<Real> *flx);
   void SetHydroDiffusivity(AthenaArray<Real> &w, AthenaArray<Real> &bc);
@@ -81,10 +86,21 @@ public:
   void ThermalFlux_aniso(const AthenaArray<Real> &p,const AthenaArray<Real> &c,
                                AthenaArray<Real> *flx);
   
-  // heat fluxes in CGL (keep separate from ThermalFlux_aniso for clarity)
-  void HeatFlux_LandauFluid(const AthenaArray<Real> &p,const AthenaArray<Real> &c,
+  // Thermal conduction (heat fluxes) in CGL. This version (without fft) assumes
+  // 1/|k_prl|~~kl_lf (kL in Sharma et al. 2006)
+  void ThermalFlux_anisoCGL(const AthenaArray<Real> &p,const AthenaArray<Real> &c,
                          AthenaArray<Real> *flx,
                     const FaceField &b, const AthenaArray<Real> &bcc);
+  
+  // Heat fluxes in CGL using the "Landau Fluid" form (Synder et al. 1997)
+  // If enabled, this function is called before ThermalFlux_anisoCGL, to allow
+  //   boundary conditions between blocks to be sorted in between (see task list).
+  void CalcParallelGradientsFFT(const AthenaArray<Real> &p,const AthenaArray<Real> &c,
+                                 const FaceField &b, const AthenaArray<Real> &bcc);
+  // Compute heat fluxes from parallel gradients of T_prl, T_prp, and |B|
+  void ThermalFlux_anisoCGLFFT(const AthenaArray<Real> &p,const AthenaArray<Real> &c,
+                               AthenaArray<Real> *flx,
+                                 const FaceField &b, const AthenaArray<Real> &bcc);
 
 private:
   MeshBlock *pmb_;    // ptr to meshblock containing this HydroDiffusion
@@ -96,9 +112,13 @@ private:
   AthenaArray<Real> fx_,fy_,fz_;
   AthenaArray<Real> dx1_,dx2_,dx3_;
   AthenaArray<Real> nu_tot_,kappa_tot_;
-  AthenaArray<Real> pprl_rho_, pprp_rho_, bmagcc_; // tmp storage to save computation in HeatFlux
+  AthenaArray<Real> bmagcc_; // Cell centered |B| to speed up LF calculation
   
-  bool using_fft_for_conduction_;
+  // For use in Landau fluid CFL limit
+  Real csprl_, rhomean_, nu_c_;
+  Real *bhat_mean_;
+  AthenaArray<Real> csprl_iloop_, rhomean_iloop_;
+  Real sqrt_twopi_, threepi_m_eight_;
 
   // functions pointer to calculate spatial dependent coefficients
   ViscosityCoeff_t CalcViscCoeff_;

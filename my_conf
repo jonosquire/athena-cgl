@@ -1,1 +1,2 @@
-python configure.py --prob=linear_wave -b -fft  --cxx=clang++ --eos=cgl --flux=hlld
+python configure.py --prob=cpaw -mpi -b -fft -hdf5 -h5double --cxx=clang++ --eos=adiabatic --flux=hlld --fftw_path=/usr/local
+# python configure.py --prob=linear_wave -b -fft  --cxx=clang++ --eos=isothermal --flux=hlld --fftw_path=/usr/local

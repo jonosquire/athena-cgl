@@ -159,6 +159,7 @@
 		A2E9CB8D216C32070072A4C5 /* rotor.cpp in Sources */ = {isa = PBXBuildFile; fileRef = A2E9CAF9216C32070072A4C5 /* rotor.cpp */; };
 		A2EFDB872236F9D1004295BE /* hlld_cgl.cpp in Sources */ = {isa = PBXBuildFile; fileRef = A2EFDB862236F9D1004295BE /* hlld_cgl.cpp */; };
 		A2EFDB8A223B54D1004295BE /* fft_conduction.cpp in Sources */ = {isa = PBXBuildFile; fileRef = A2EFDB88223B54D1004295BE /* fft_conduction.cpp */; };
+		A2FEC277224046220019DC95 /* bvals_conduction.cpp in Sources */ = {isa = PBXBuildFile; fileRef = A2FEC275224046220019DC95 /* bvals_conduction.cpp */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXCopyFilesBuildPhase section */
@@ -368,6 +369,8 @@
 		A2EFDB862236F9D1004295BE /* hlld_cgl.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = hlld_cgl.cpp; sourceTree = "<group>"; };
 		A2EFDB88223B54D1004295BE /* fft_conduction.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = fft_conduction.cpp; sourceTree = "<group>"; };
 		A2EFDB89223B54D1004295BE /* fft_conduction.hpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.h; path = fft_conduction.hpp; sourceTree = "<group>"; };
+		A2FEC275224046220019DC95 /* bvals_conduction.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = bvals_conduction.cpp; sourceTree = "<group>"; };
+		A2FEC276224046220019DC95 /* bvals_conduction.hpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.h; path = bvals_conduction.hpp; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -486,6 +489,9 @@
 				A2E9CA45216C32070072A4C5 /* bvals_mg.hpp */,
 				A2E9CA46216C32070072A4C5 /* flux_correction_fc.cpp */,
 				A2E9CA47216C32070072A4C5 /* bvals_grav.hpp */,
+				A2E9CA54216C32070072A4C5 /* bvals_grav.cpp */,
+				A2FEC275224046220019DC95 /* bvals_conduction.cpp */,
+				A2FEC276224046220019DC95 /* bvals_conduction.hpp */,
 				A2E9CA48216C32070072A4C5 /* bvals_cc.cpp */,
 				A2E9CA49216C32070072A4C5 /* bvals.hpp */,
 				A2E9CA4A216C32070072A4C5 /* outflow.cpp */,
@@ -498,7 +504,6 @@
 				A2E9CA51216C32070072A4C5 /* get_boundary_flag.cpp */,
 				A2E9CA52216C32070072A4C5 /* bvals_mg.cpp */,
 				A2E9CA53216C32070072A4C5 /* polarwedge.cpp */,
-				A2E9CA54216C32070072A4C5 /* bvals_grav.cpp */,
 			);
 			path = bvals;
 			sourceTree = "<group>";
@@ -882,6 +887,7 @@
 				A2E9CB81216C32070072A4C5 /* poisson.cpp in Sources */,
 				A2E9CB11216C32070072A4C5 /* bvals_mg.cpp in Sources */,
 				A2E9CB41216C32070072A4C5 /* adiabatic_hydro.cpp in Sources */,
+				A2FEC277224046220019DC95 /* bvals_conduction.cpp in Sources */,
 				A2E9CB36216C32070072A4C5 /* athena_fft.cpp in Sources */,
 				A2E9CB73216C32070072A4C5 /* fft.cpp in Sources */,
 				A2E9CB38216C32070072A4C5 /* history.cpp in Sources */,

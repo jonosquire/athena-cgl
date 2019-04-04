@@ -218,6 +218,8 @@ void FFTBlock::ApplyKernel(int mode) {
   return;
 }
 
+void FFTBlock::ApplyKernel(int, Real*){};
+
 //----------------------------------------------------------------------------------------
 //! \fn AthenaFFTPlan *FFTBlock::QuickCreatePlan(AthenaFFTComplex *data,
 //                                                enum AthenaFFTDirection dir)

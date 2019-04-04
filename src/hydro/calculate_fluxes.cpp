@@ -204,10 +204,9 @@ void Hydro::CalculateFluxes(AthenaArray<Real> &w, FaceField &b,
     }
     
     if (CGL_EOS) {
-      if (phdif->kl_lf != 0.0)
-        phdif->AddHydroDiffusionLFHeatFlux(phdif->cndflx,flux);
+      if (phdif->kl_lf > 0.0 || phdif->using_fft_for_conduction==true)
+        phdif->AddHydroDiffusionCGLHeatFlux(phdif->cndflx,flux);
     }
-    
   }
 
   if (MAGNETIC_FIELDS_ENABLED && (NON_BAROTROPIC_EOS || CGL_EOS)) {

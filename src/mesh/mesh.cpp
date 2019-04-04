@@ -497,8 +497,11 @@ Mesh::Mesh(ParameterInput *pin, int mesh_test) {
   else if (SELF_GRAVITY_ENABLED==2)
     pmgrd = new MGGravityDriver(this, MGBoundaryFunction_, pin);
   
-  if (CGL_EOS && pblock->phydro->phdif->UsingFFTForConduction())
+  fft_for_conduction = false;
+  if (CGL_EOS && pblock->phydro->phdif->using_fft_for_conduction) {
     pfcondd = new FFTConductionDriver(this,pin);
+    fft_for_conduction = true;
+  }
 
   if (turb_flag > 0)
     ptrbd = new TurbulenceDriver(this, pin);
@@ -834,9 +837,11 @@ Mesh::Mesh(ParameterInput *pin, IOWrapper& resfile, int mesh_test) {
   else if (SELF_GRAVITY_ENABLED==2)
     pmgrd = new MGGravityDriver(this, MGBoundaryFunction_, pin);
   
-  Real kl_lf = pin->GetOrAddReal("problem","kl_landau",0.0);
-  if (CGL_EOS && kl_lf<0.0)
+  fft_for_conduction = false;
+  if (CGL_EOS && pblock->phydro->phdif->using_fft_for_conduction) {
     pfcondd = new FFTConductionDriver(this,pin);
+    fft_for_conduction = true;
+  }
 
   if (turb_flag > 0)
     ptrbd = new TurbulenceDriver(this, pin);
@@ -859,6 +864,7 @@ Mesh::~Mesh() {
   if (SELF_GRAVITY_ENABLED==1) delete pfgrd;
   else if (SELF_GRAVITY_ENABLED==2) delete pmgrd;
   if (turb_flag > 0) delete ptrbd;
+  if (CGL_EOS && fft_for_conduction==true) delete pfcondd;
   if (adaptive==true) { // deallocate arrays for AMR
     delete [] nref;
     delete [] nderef;

@@ -44,6 +44,7 @@ class FFTDriver;
 class FFTGravityDriver;
 class TurbulenceDriver;
 class FFTConductionDriver;
+class ConductionBoundaryValues;
 
 //----------------------------------------------------------------------------------------
 //! \class MeshBlock
@@ -53,6 +54,7 @@ class MeshBlock {
   friend class RestartOutput;
   friend class BoundaryValues;
   friend class GravityBoundaryValues;
+  friend class ConductionBoundaryValues;
   friend class Mesh;
   friend class Hydro;
   friend class TaskList;
@@ -98,6 +100,7 @@ public:
   GravityBoundaryValues *pgbval;
   Reconstruction *precon;
   MeshRefinement *pmr;
+  ConductionBoundaryValues *pcondbval;
 
   // physics-related objects
   Hydro *phydro;
@@ -154,6 +157,8 @@ class Mesh {
   friend class Gravity;
   friend class HydroDiffusion;
   friend class FieldDiffusion;
+  friend class ConductionBoundaryValues;
+  friend class FFTConductionDriver;
 #ifdef HDF5OUTPUT
   friend class ATHDF5Output;
 #endif
@@ -185,6 +190,8 @@ public:
   FFTGravityDriver *pfgrd;
   FFTConductionDriver *pfcondd;
   MGGravityDriver *pmgrd;
+  
+  bool fft_for_conduction;
 
   AthenaArray<Real> *ruser_mesh_data;
   AthenaArray<int> *iuser_mesh_data;

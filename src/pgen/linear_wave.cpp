@@ -36,7 +36,7 @@
 
 // Parameters which define initial solution -- made global so that they can be shared
 // with functions A1,2,3 which compute vector potentials
-static Real d0,p0,pp0,pl0,u0,bx0, by0, bz0, dby, dbz;
+static Real d0,p0,pp0,pl0,pres,u0,bx0, by0, bz0, dby, dbz;
 static int wave_flag;
 static Real ang_2, ang_3; // Rotation angles about the y and z' axis
 static bool ang_2_vert, ang_3_vert; // Switches to set ang_2 and/or ang_3 to pi/2
@@ -142,7 +142,7 @@ void Mesh::InitUserMeshData(ParameterInput *pin) {
   // Compute eigenvectors, where the quantities u0 and bx0 are parallel to the
   // wavevector, and v0,w0,by0,bz0 are perpendicular.
   d0 = 1.0;
-  p0 = 0.0;
+  p0 = pin->GetOrAddReal("problem", "p0", 1.0);
   u0 = vflow;
   Real v0 = 0.0;
   Real w0 = 0.0;
@@ -157,7 +157,7 @@ void Mesh::InitUserMeshData(ParameterInput *pin) {
   Real h0 = 0.0;
 
   if (NON_BAROTROPIC_EOS) {
-    p0 = 1.0/gam;
+    p0 = p0/gam;
     h0 = ((p0/gm1 + 0.5*d0*(u0*u0+v0*v0+w0*w0)) + p0)/d0;
     if (MAGNETIC_FIELDS_ENABLED) h0 += (bx0*bx0+by0*by0+bz0*bz0)/d0;
   }
@@ -956,57 +956,57 @@ static void Eigensystem(const Real d, const Real v1, const Real v2, const Real v
       ////////////////////   INSERT EIGENMODES HERE   //////////////////
       {
         if (b1 != 1.0000000000000000)
-          std::cout << "Bx does not match with expected value\n";
-        if (b2 != 1.4142135623730951)
-          std::cout << "By does not match with expected value\n";
-        if (b3 != 0.5000000000000000)
-          std::cout << "Bz does not match with expected value\n";
+          std::cout << "\n-----\nBx does not match with expected value\n-----\n\n";
+        if (b2 != 0.0000000000000000)
+          std::cout << "\n-----\nBy does not match with expected value\n-----\n\n";
+        if (b3 != 0.0000000000000000)
+          std::cout << "\n-----\nBz does not match with expected value\n-----\n\n";
         if (v1 != 0.0000000000000000)
-          std::cout << "vx does not match with expected value\n";
+          std::cout << "\n-----\nvx does not match with expected value\n-----\n\n";
         if (d != 1.0000000000000000)
-          std::cout << "rho does not match with expected value\n";
-        if (pprp != 8.0000000000000000)
-          std::cout << "pprp does not match with expected value\n";
+          std::cout << "\n-----\nrho does not match with expected value\n-----\n\n";
+        if (pprp != 5.0000000000000000)
+          std::cout << "\n-----\npprp does not match with expected value\n-----\n\n";
         if (pprl != 5.0000000000000000)
-          std::cout << "pprl does not match with expected value\n";
+          std::cout << "\n-----\npprl does not match with expected value\n-----\n\n";
         
         // Compute eigenvalues
-        eigenvalues[0] = -4.0504624406571814;
-        eigenvalues[1] = -1.8598759722653839;
-        eigenvalues[2] = -1.3867504905630716;
+        eigenvalues[0] = -3.8729833462074170;
+        eigenvalues[1] = -1.0000000000000000;
+        eigenvalues[2] = -0.9999999999999997;
         eigenvalues[3] = 0.0000000000000000;
-        eigenvalues[4] = 0.0000000000000002;
-        eigenvalues[5] = 1.3867504905630741;
-        eigenvalues[6] = 1.8598759722653830;
-        eigenvalues[7] = 4.0504624406571734;
+        eigenvalues[4] = 0.0000000000000000;
+        eigenvalues[5] = 1.0000000000000000;
+        eigenvalues[6] = 1.0000000000000000;
+        eigenvalues[7] = 3.8729833462074170;
         
         // Compute right eigenvectors
-        right_eigenmatrix[0][0] = 0.0461763602153682;
-        right_eigenmatrix[1][0] = -0.1870356126986054;
-        right_eigenmatrix[2][0] = 0.0515721849688499;
-        right_eigenmatrix[3][0] = 0.0182335208560404;
-        right_eigenmatrix[4][0] = 0.9544912084962514;
-        right_eigenmatrix[5][0] = 0.2049122885794528;
-        right_eigenmatrix[6][0] = 0.0780356538851639;
-        right_eigenmatrix[7][0] = 0.0275897700182628;
+        right_eigenmatrix[0][0] = -0.0712018854508904;
+        right_eigenmatrix[1][0] = 0.2757637165698668;
+        right_eigenmatrix[2][0] = 0.0000000000000000;
+        right_eigenmatrix[3][0] = 0.0000000000000000;
+        right_eigenmatrix[4][0] = -0.8900235681361306;
+        right_eigenmatrix[5][0] = -0.3560094272544522;
+        right_eigenmatrix[6][0] = 0.0000000000000000;
+        right_eigenmatrix[7][0] = 0.0000000000000000;
         
-        right_eigenmatrix[0][1] = -0.0772548291421089;
-        right_eigenmatrix[1][1] = 0.1436844004628759;
-        right_eigenmatrix[2][1] = 0.4631971438270955;
-        right_eigenmatrix[3][1] = 0.1637649207131898;
-        right_eigenmatrix[4][1] = -0.7697411802888839;
-        right_eigenmatrix[5][1] = -0.3428261510757946;
-        right_eigenmatrix[6][1] = 0.1397925022249551;
-        right_eigenmatrix[7][1] = 0.0494241131411506;
+        right_eigenmatrix[0][1] = 0.0000000000000000;
+        right_eigenmatrix[1][1] = 0.0000000000000000;
+        right_eigenmatrix[2][1] = 0.0000000000000000;
+        right_eigenmatrix[3][1] = 0.7071067811865475;
+        right_eigenmatrix[4][1] = 0.0000000000000000;
+        right_eigenmatrix[5][1] = 0.0000000000000000;
+        right_eigenmatrix[6][1] = 0.0000000000000000;
+        right_eigenmatrix[7][1] = 0.7071067811865475;
         
-        right_eigenmatrix[0][2] = -0.0000000000000005;
-        right_eigenmatrix[1][2] = 0.0000000000000006;
-        right_eigenmatrix[2][2] = 0.2703690352179396;
-        right_eigenmatrix[3][2] = -0.7647191129018719;
-        right_eigenmatrix[4][2] = -0.0000000000000034;
-        right_eigenmatrix[5][2] = -0.0000000000000020;
-        right_eigenmatrix[6][2] = 0.1949658839552013;
-        right_eigenmatrix[7][2] = -0.5514467945790071;
+        right_eigenmatrix[0][2] = -0.0000000000000000;
+        right_eigenmatrix[1][2] = 0.0000000000000000;
+        right_eigenmatrix[2][2] = -0.7071067811865476;
+        right_eigenmatrix[3][2] = 0.0000000000000000;
+        right_eigenmatrix[4][2] = -0.0000000000000006;
+        right_eigenmatrix[5][2] = -0.0000000000000004;
+        right_eigenmatrix[6][2] = -0.7071067811865475;
+        right_eigenmatrix[7][2] = 0.0000000000000000;
         
         right_eigenmatrix[0][3] = 1.0000000000000000;
         right_eigenmatrix[1][3] = 0.0000000000000000;
@@ -1017,117 +1017,118 @@ static void Eigensystem(const Real d, const Real v1, const Real v2, const Real v
         right_eigenmatrix[6][3] = 0.0000000000000000;
         right_eigenmatrix[7][3] = 0.0000000000000000;
         
-        right_eigenmatrix[0][4] = 0.2661620916435204;
-        right_eigenmatrix[1][4] = 0.0000000000000000;
+        right_eigenmatrix[0][4] = -0.5644132573293230;
+        right_eigenmatrix[1][4] = -0.0000000000000000;
         right_eigenmatrix[2][4] = 0.0000000000000001;
-        right_eigenmatrix[3][4] = -0.0000000000000001;
-        right_eigenmatrix[4][4] = -0.4511416462047984;
-        right_eigenmatrix[5][4] = -0.8206196210127484;
-        right_eigenmatrix[6][4] = 0.2154321623372456;
-        right_eigenmatrix[7][4] = 0.0761667714371739;
+        right_eigenmatrix[3][4] = 0.0000000000000000;
+        right_eigenmatrix[4][4] = 0.5837112620769379;
+        right_eigenmatrix[5][4] = 0.5837112620769379;
+        right_eigenmatrix[6][4] = 0.0000000000000001;
+        right_eigenmatrix[7][4] = 0.0000000000000000;
         
-        right_eigenmatrix[0][5] = 0.0000000000000003;
-        right_eigenmatrix[1][5] = 0.0000000000000005;
-        right_eigenmatrix[2][5] = -0.2703690352179355;
-        right_eigenmatrix[3][5] = 0.7647191129018733;
-        right_eigenmatrix[4][5] = 0.0000000000000023;
-        right_eigenmatrix[5][5] = 0.0000000000000018;
-        right_eigenmatrix[6][5] = 0.1949658839551999;
-        right_eigenmatrix[7][5] = -0.5514467945790077;
+        right_eigenmatrix[0][5] = 0.0000000000000000;
+        right_eigenmatrix[1][5] = 0.0000000000000000;
+        right_eigenmatrix[2][5] = 0.0000000000000000;
+        right_eigenmatrix[3][5] = 0.7071067811865475;
+        right_eigenmatrix[4][5] = 0.0000000000000000;
+        right_eigenmatrix[5][5] = 0.0000000000000000;
+        right_eigenmatrix[6][5] = 0.0000000000000000;
+        right_eigenmatrix[7][5] = -0.7071067811865475;
         
-        right_eigenmatrix[0][6] = 0.0772548291421089;
-        right_eigenmatrix[1][6] = 0.1436844004628759;
-        right_eigenmatrix[2][6] = 0.4631971438270950;
-        right_eigenmatrix[3][6] = 0.1637649207131896;
-        right_eigenmatrix[4][6] = 0.7697411802888844;
-        right_eigenmatrix[5][6] = 0.3428261510757946;
-        right_eigenmatrix[6][6] = -0.1397925022249549;
-        right_eigenmatrix[7][6] = -0.0494241131411506;
+        right_eigenmatrix[0][6] = -0.0000000000000000;
+        right_eigenmatrix[1][6] = -0.0000000000000000;
+        right_eigenmatrix[2][6] = -0.7071067811865476;
+        right_eigenmatrix[3][6] = 0.0000000000000000;
+        right_eigenmatrix[4][6] = -0.0000000000000003;
+        right_eigenmatrix[5][6] = -0.0000000000000003;
+        right_eigenmatrix[6][6] = 0.7071067811865475;
+        right_eigenmatrix[7][6] = 0.0000000000000000;
         
-        right_eigenmatrix[0][7] = -0.0461763602153683;
-        right_eigenmatrix[1][7] = -0.1870356126986054;
-        right_eigenmatrix[2][7] = 0.0515721849688501;
-        right_eigenmatrix[3][7] = 0.0182335208560404;
-        right_eigenmatrix[4][7] = -0.9544912084962512;
-        right_eigenmatrix[5][7] = -0.2049122885794529;
-        right_eigenmatrix[6][7] = -0.0780356538851638;
-        right_eigenmatrix[7][7] = -0.0275897700182628;
+        right_eigenmatrix[0][7] = 0.0712018854508904;
+        right_eigenmatrix[1][7] = 0.2757637165698669;
+        right_eigenmatrix[2][7] = 0.0000000000000000;
+        right_eigenmatrix[3][7] = 0.0000000000000000;
+        right_eigenmatrix[4][7] = 0.8900235681361306;
+        right_eigenmatrix[5][7] = 0.3560094272544523;
+        right_eigenmatrix[6][7] = 0.0000000000000000;
+        right_eigenmatrix[7][7] = 0.0000000000000000;
         
         // Compute left eigenvectors
-        left_eigenmatrix[0][0] = 0.0000000000000001;
-        left_eigenmatrix[0][1] = -0.1844565203013406;
-        left_eigenmatrix[0][2] = 0.5016556013044307;
-        left_eigenmatrix[0][3] = 0.6615345109510068;
-        left_eigenmatrix[0][4] = 0.1773620387512890;
-        left_eigenmatrix[0][5] = 0.4952092969937152;
-        left_eigenmatrix[0][6] = -0.0000000000000001;
+        left_eigenmatrix[0][0] = -0.0000000000000000;
+        left_eigenmatrix[0][1] = 0.1214174210945741;
+        left_eigenmatrix[0][2] = -0.4775756537727940;
+        left_eigenmatrix[0][3] = 0.8701605051817918;
+        left_eigenmatrix[0][4] = -0.0000000000000001;
+        left_eigenmatrix[0][5] = 0.0000000000000000;
+        left_eigenmatrix[0][6] = 0.0000000000000000;
         left_eigenmatrix[0][7] = -0.0000000000000000;
         
-        left_eigenmatrix[1][0] = 0.1940168189491084;
-        left_eigenmatrix[1][1] = -0.0600056534850066;
-        left_eigenmatrix[1][2] = -0.6226639745907686;
+        left_eigenmatrix[1][0] = -0.0000000000000002;
+        left_eigenmatrix[1][1] = 0.4170288281141495;
+        left_eigenmatrix[1][2] = -0.4170288281141497;
         left_eigenmatrix[1][3] = 0.0000000000000000;
-        left_eigenmatrix[1][4] = -0.2201449594168501;
-        left_eigenmatrix[1][5] = -0.1509085632328527;
-        left_eigenmatrix[1][6] = 0.0685953041715781;
-        left_eigenmatrix[1][7] = -0.7036361679827802;
+        left_eigenmatrix[1][4] = -0.0000000000000002;
+        left_eigenmatrix[1][5] = 0.0000000000000000;
+        left_eigenmatrix[1][6] = 0.0000000000000000;
+        left_eigenmatrix[1][7] = 0.8075728530872482;
         
-        left_eigenmatrix[2][0] = 0.1940168189491079;
-        left_eigenmatrix[2][1] = 0.0600056534850068;
-        left_eigenmatrix[2][2] = 0.6226639745907678;
+        left_eigenmatrix[2][0] = 0.0000000000000002;
+        left_eigenmatrix[2][1] = -0.4170288281141495;
+        left_eigenmatrix[2][2] = 0.4170288281141497;
         left_eigenmatrix[2][3] = 0.0000000000000000;
-        left_eigenmatrix[2][4] = 0.2201449594168502;
-        left_eigenmatrix[2][5] = 0.1509085632328520;
-        left_eigenmatrix[2][6] = 0.0685953041715782;
-        left_eigenmatrix[2][7] = -0.7036361679827809;
+        left_eigenmatrix[2][4] = 0.0000000000000002;
+        left_eigenmatrix[2][5] = 0.0000000000000000;
+        left_eigenmatrix[2][6] = 0.0000000000000000;
+        left_eigenmatrix[2][7] = 0.8075728530872482;
         
-        left_eigenmatrix[3][0] = 0.2362179179408618;
-        left_eigenmatrix[3][1] = 0.1485940388230528;
-        left_eigenmatrix[3][2] = -0.8434585393955253;
+        left_eigenmatrix[3][0] = 0.0000000000000000;
+        left_eigenmatrix[3][1] = 0.0000000000000000;
+        left_eigenmatrix[3][2] = 0.0000000000000000;
         left_eigenmatrix[3][3] = 0.0000000000000000;
-        left_eigenmatrix[3][4] = -0.2982076264281373;
-        left_eigenmatrix[3][5] = -0.3307970726590782;
-        left_eigenmatrix[3][6] = 0.0835156458068742;
-        left_eigenmatrix[3][7] = 0.0732751278159677;
+        left_eigenmatrix[3][4] = 0.0000000000000000;
+        left_eigenmatrix[3][5] = 0.7071067811865475;
+        left_eigenmatrix[3][6] = -0.7071067811865475;
+        left_eigenmatrix[3][7] = 0.0000000000000000;
         
-        left_eigenmatrix[4][0] = 0.2362179179408613;
-        left_eigenmatrix[4][1] = -0.1485940388230527;
-        left_eigenmatrix[4][2] = 0.8434585393955247;
+        left_eigenmatrix[4][0] = 0.0000000000000000;
+        left_eigenmatrix[4][1] = 0.0000000000000000;
+        left_eigenmatrix[4][2] = 0.0000000000000000;
         left_eigenmatrix[4][3] = 0.0000000000000000;
-        left_eigenmatrix[4][4] = 0.2982076264281395;
-        left_eigenmatrix[4][5] = 0.3307970726590777;
-        left_eigenmatrix[4][6] = 0.0835156458068758;
-        left_eigenmatrix[4][7] = 0.0732751278159675;
+        left_eigenmatrix[4][4] = 0.0000000000000000;
+        left_eigenmatrix[4][5] = 0.7071067811865475;
+        left_eigenmatrix[4][6] = 0.7071067811865475;
+        left_eigenmatrix[4][7] = 0.0000000000000000;
         
-        left_eigenmatrix[5][0] = -0.1949658839552006;
-        left_eigenmatrix[5][1] = 0.0000000000000000;
-        left_eigenmatrix[5][2] = 0.2703690352179373;
+        left_eigenmatrix[5][0] = -0.7071067811865476;
+        left_eigenmatrix[5][1] = -0.0000000000000001;
+        left_eigenmatrix[5][2] = -0.0000000000000002;
         left_eigenmatrix[5][3] = 0.0000000000000000;
-        left_eigenmatrix[5][4] = -0.7647191129018727;
-        left_eigenmatrix[5][5] = -0.0000000000000001;
-        left_eigenmatrix[5][6] = 0.5514467945790076;
+        left_eigenmatrix[5][4] = -0.7071067811865475;
+        left_eigenmatrix[5][5] = 0.0000000000000000;
+        left_eigenmatrix[5][6] = 0.0000000000000000;
         left_eigenmatrix[5][7] = 0.0000000000000000;
         
-        left_eigenmatrix[6][0] = 0.1949658839552006;
-        left_eigenmatrix[6][1] = 0.0000000000000001;
-        left_eigenmatrix[6][2] = 0.2703690352179373;
+        left_eigenmatrix[6][0] = 0.0000000000000001;
+        left_eigenmatrix[6][1] = -0.3713906763541036;
+        left_eigenmatrix[6][2] = 0.9284766908852594;
         left_eigenmatrix[6][3] = 0.0000000000000000;
-        left_eigenmatrix[6][4] = -0.7647191129018723;
-        left_eigenmatrix[6][5] = -0.0000000000000001;
-        left_eigenmatrix[6][6] = -0.5514467945790077;
+        left_eigenmatrix[6][4] = 0.0000000000000003;
+        left_eigenmatrix[6][5] = 0.0000000000000000;
+        left_eigenmatrix[6][6] = 0.0000000000000000;
         left_eigenmatrix[6][7] = 0.0000000000000000;
         
-        left_eigenmatrix[7][0] = -0.0000000000000001;
-        left_eigenmatrix[7][1] = 0.2155592906876035;
-        left_eigenmatrix[7][2] = -0.5862439853575638;
+        left_eigenmatrix[7][0] = -0.7071067811865476;
+        left_eigenmatrix[7][1] = -0.0000000000000001;
+        left_eigenmatrix[7][2] = -0.0000000000000001;
         left_eigenmatrix[7][3] = 0.0000000000000000;
-        left_eigenmatrix[7][4] = -0.2072685487380802;
-        left_eigenmatrix[7][5] = -0.7529222606181517;
-        left_eigenmatrix[7][6] = 0.0000000000000001;
+        left_eigenmatrix[7][4] = 0.7071067811865475;
+        left_eigenmatrix[7][5] = 0.0000000000000000;
+        left_eigenmatrix[7][6] = 0.0000000000000000;
         left_eigenmatrix[7][7] = 0.0000000000000000;
         
 
       }
+
       ////////////////////    END OF CGL EIGENMODES   //////////////////
       //////////////////////////////////////////////////////////////////
       

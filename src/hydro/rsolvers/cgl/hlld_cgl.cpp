@@ -52,7 +52,7 @@ void Hydro::RiemannSolver(const int kl, const int ku, const int jl, const int ju
   // Number of Newton-Raphson iterations to solve for (pp-pl)/B^2
   const int num_newton_iter = 4;
   // Threshold between fhr and fhl to use Newton-Raphson iteration
-  const Real thresh_newton_iter = 1e10;
+  const Real thresh_newton_iter = 1e-10;
   // Note: tests suggest that the NR solver doesn't really help much.
   //  It basically just makes it more likely to crash without an obvious
   //  gain in accuracy
@@ -225,7 +225,8 @@ void Hydro::RiemannSolver(const int kl, const int ku, const int jl, const int ju
                                   0.5*bsq_star - ke_star);
           }
           //--- Step 4.9  Compute S*_L and S*_R, Alfven discontinuity speeds
-          Real sqrt_dpstar = std::sqrt(fhstar);
+//          std::cout << i <<":"<< std::sqrt(fhstar) << ", " ;
+          Real sqrt_dpstar = fhstar > 0.0 ? std::sqrt(fhstar) : 0.0;
           spd[1] = ustar - fabs(bxi)*sqrt_dpstar/sqrtdhll;
           spd[3] = ustar + fabs(bxi)*sqrt_dpstar/sqrtdhll;
           
@@ -398,6 +399,7 @@ void Hydro::RiemannSolver(const int kl, const int ku, const int jl, const int ju
         
       }
     }}
+//  std::cout <<"\n\n";
   
   return;
 }

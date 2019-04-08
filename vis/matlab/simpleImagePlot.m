@@ -1,24 +1,25 @@
 function simpleImagePlot()
 
 
-folder = '~/Research/athena/wave-tests/mhd';
+folder = '~/Research/athena/wave-tests/cgl';
+% folder = '~/Research/athena/turb-tests/decay';
 
 file = 'LinWave'; % Name of output
 output_id = 2; % Output id (set in input file)
-nums = 0:40;
+nums = 0:1000;
 
 filename = @(n,oid) [folder '/' file '.block0.out' num2str(oid) '.'  sprintf('%05d',n) '.vtk'];readfunc = @(file) readVTKpp(file);
 filename = @(n,oid) [folder '/' file '.out' num2str(oid) '.'  sprintf('%05d',n) '.athdf'];readfunc = @(file) readHDF5(file);
 
 
 dpstore = [];estore=[];ts = [];
-lims = 0.3*[-1 1];
+lims = 1*[-1 1];
 for nnn = nums
     V = readfunc(filename(nnn,output_id));
     ar = length(V.x)/length(V.y);
     
 %     tp = @(f) f.'-mean(mean(mean(f)));
-%     vars = {'vel3'};
+%     vars = {'vel2','vel3','Bcc2','Bcc3'};
 %     for kkk=1:length(vars)
 %         subplot(1,length(vars),kkk)
 %         imagesc(V.x,V.y,tp(V.(vars{kkk})(:,:,1)))
@@ -39,19 +40,19 @@ for nnn = nums
     hold off
     ylim(lims)
     title(['t = ' num2str(V.t)])
-%     subplot(212)
-%     if isfield(V,'pprp')
-%         plot(V.x,oneD((V.pprp-V.pprl)./(V.Bcc1.^2+ V.Bcc2.^2+V.Bcc3.^2)))
-%     end
-%     ylim([-2 1])
+    subplot(212)
+    if isfield(V,'pprp')
+        plot(V.x,oneD((V.pprp-V.pprl)./(V.Bcc1.^2+ V.Bcc2.^2+V.Bcc3.^2)))
+    end
+    ylim([-2 1])
     
-%     dpstore = [dpstore mean(mean(mean(V.pprp-V.pprl)./(V.Bcc1.^2+ V.Bcc2.^2+V.Bcc3.^2)))];
+    dpstore = [dpstore mean(mean(mean(V.pprp-V.pprl)./(V.Bcc1.^2+ V.Bcc2.^2+V.Bcc3.^2)))];
     ts = [ts V.t];
     estore =[estore mean(mean(mean(0.5*V.Bcc2.^2 + 0.5*V.rho.*V.vel2.^2)))];
     
     drawnow
-%     pause(0.1)
-%     ginput(1);
+    pause(0.1)
+%      ginput(1);
 end
 % semilogy(ts,-dpstore,'r',ts,0.5*exp(-1*ts),':k','Linewidth',3)
 subplot(212)

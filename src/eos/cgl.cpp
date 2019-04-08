@@ -29,7 +29,7 @@ EquationOfState::EquationOfState(MeshBlock *pmb, ParameterInput *pin) {
   density_floor_  = pin->GetOrAddReal("hydro", "dfloor", std::sqrt(1024*(FLT_MIN)));
   pressure_floor_ = pin->GetOrAddReal("hydro", "pfloor", std::sqrt(1024*(FLT_MIN)));
   magnetic_mag_floor_ = pin->GetOrAddReal("hydro", "bmagfloor", std::sqrt(1024*(FLT_MIN)));
-  fh_hlld_floor_ = pin->GetOrAddReal("hydro", "fh_hlld_floor", 0.1);
+  fh_hlld_floor_ = pin->GetOrAddReal("hydro", "fh_hlld_floor", 0.2);
   // Collisions and limiters
   collision_freq_ = pin->GetOrAddReal("problem", "nu_coll", 0.0);
   firehose_limiter_ = pin->GetOrAddInteger("problem", "firehose_limiter", 0);

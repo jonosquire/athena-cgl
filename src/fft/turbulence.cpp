@@ -259,7 +259,9 @@ void TurbulenceDriver::PowerSpectrum(AthenaFFTComplex *amp) {
         if (gidx == 0) {
           pcoeff = 0.0;
         } else {
-          if ((nmag > nlow) && (nmag < nhigh)) {
+          if ((abs(nx) > nlow) && (abs(nx) < nhigh) &&
+              (abs(ny) > nlow) && (abs(ny) < nhigh) &&
+              (abs(nz) > nlow) && (abs(nz) < nhigh)) {
             pcoeff = 1.0/std::pow(kmag,(expo+2.0)/2.0);
           } else {
             pcoeff = 0.0;
@@ -301,7 +303,7 @@ void TurbulenceDriver::Project(AthenaFFTComplex **fv) {
         Real kx=nx*pfb->dkx[0]; // dkx[i] gets weirdly permuted (based on meshblocks) when using MPI!!!
         Real ky=ny*pfb->dkx[1]; // JS: I *think* I fixed, Lx[i] wasn't in the functions to swap and permute axes
         Real kz=nz*pfb->dkx[2];
-        Real kmag = std::sqrt(kx*kx+ky*ky+kz*kz);
+        Real kmag = std::sqrt(kx*kx + ky*ky + kz*kz);
         // khat stored in kx,ky,kz
         kx /= kmag;
         ky /= kmag;
@@ -319,7 +321,7 @@ void TurbulenceDriver::Project(AthenaFFTComplex **fv) {
           
           fv[0][kidx][1] -= kdotf_im * kx;
           fv[1][kidx][1] -= kdotf_im * ky;
-          fv[2][kidx][1] -= kdotf_im * kz;\
+          fv[2][kidx][1] -= kdotf_im * kz;
           
 //          if (fv[1][kidx][0] != 0.){
 //            std::cout << "n=" << nx << "," << ny << "," << nz << "\n";
@@ -332,8 +334,6 @@ void TurbulenceDriver::Project(AthenaFFTComplex **fv) {
 //          }
           
         }
-        
-        
   }}}
 //  std::cout <<"\n";
 //  std::cout << divsum <<"\n";

@@ -42,6 +42,7 @@ meshtest.dat
 
 # Mac OS metadata
 .DS_Store
+*.xcodeproj
 
 # editor temp files
 *~

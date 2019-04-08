@@ -6,7 +6,7 @@ file = 'Turb'; % Name of output
 output_id = 2; % Output id (set in input file) 
 MHD = 0; % logical for MHD or not
 
-snapshot_num = 0; 
+snapshot_num = 20; 
 
 filename = @(n) [folder '/' file '.out' num2str(output_id) '.'  sprintf('%05d',n) '.athdf'];
     
@@ -26,7 +26,7 @@ for kk=1:3
     K{kk} = 2i*pi/Ls(kk)*[0:(Ns(kk)/2-1) -Ns(kk)/2 -Ns(kk)/2+1:-1].';
 end
 [KX, KY, KZ] = ndgrid(K{1},K{2},K{3}); % 3D grid in K
-Kmag = sqrt(abs(KX).^2 + abs(KY).^2 + abs(KZ).^2); % |K|
+Kmag = sqrt(abs(KX).^2*0 + abs(KY).^2 + abs(KZ).^2); % |K|
 % Bins for k
 if numKgrid == 0
     kgrid = (0:2*pi/Ls(2):max(imag(K{2}))).'+1e-4; % Use ky for spectrum binning

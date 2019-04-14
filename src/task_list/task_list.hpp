@@ -128,7 +128,7 @@ public:
   
   enum TaskStatus CGLCollisions(MeshBlock *pmb, int stage);
   
-  enum TaskStatus FFTConduction(MeshBlock *pmb, int stage);
+  enum TaskStatus LFConductionFFT(MeshBlock *pmb, int stage);
   enum TaskStatus SendConductionBoundary(MeshBlock *pmb, int stage);
   enum TaskStatus ReceiveConductionBoundary(MeshBlock *pmb, int stage);
   enum TaskStatus ConductionPhysicalBoundary(MeshBlock *pmb, int stage);

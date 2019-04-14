@@ -18,6 +18,7 @@ class Hydro;
 class ParameterInput;
 class Coordinates;
 class HydroDiffusion;
+class FFTConduction;
 
 
 void ConstViscosity(HydroDiffusion *phdif, MeshBlock *pmb, const AthenaArray<Real> &w,
@@ -34,6 +35,7 @@ enum {FLXEN=0, FLXMU=1};
 //  \brief data and functions for physical diffusion processes in the hydro
 
 class HydroDiffusion {
+friend class FFTConduction;
 public:
   HydroDiffusion(Hydro *phyd, ParameterInput *pin);
   ~HydroDiffusion();
@@ -50,15 +52,16 @@ public:
   AthenaArray<Real> cndflx[3]; // thermal stress tensor
   AthenaArray<Real> kappa; // conduction array
   
-  // Storage for parallel gradients in LF calculation
-  AthenaArray<Real> dprl_cond;
-  
   // Landau-fluid |k| for evaluating heat fluxes
   // If param fft_conduct=1, enables Fourier calculation of 1/|k_prl| ~ 1/|B0.k| in
   //    CalcParallelHeatFluxesFFT. Otherwise, uses 1/|k_prl|=1/kl_lf, with kl_lf set with
   //    kl_landau, as a standard diffusion operator
   Real kl_lf; // See Sharma et al. 2006, equations (13) and (14)
   bool using_fft_for_conduction;
+  // Storage for parallel gradients in LF calculation
+  AthenaArray<Real> dprl_cond;
+  // FFT conduction class
+  FFTConduction *pfcondd;
 
   // functions
   void CalcHydroDiffusionFlux(const AthenaArray<Real> &p, const AthenaArray<Real> &c,
@@ -93,7 +96,7 @@ public:
                     const FaceField &b, const AthenaArray<Real> &bcc);
   
   // Heat fluxes in CGL using the "Landau Fluid" form (Synder et al. 1997)
-  // If enabled, this function is called before ThermalFlux_anisoCGL, to allow
+  // If enabled, this function is called before ThermalFlux_anisoCGLFFT, to allow
   //   boundary conditions between blocks to be sorted in between (see task list).
   void CalcParallelGradientsFFT(const AthenaArray<Real> &p,const AthenaArray<Real> &c,
                                  const FaceField &b, const AthenaArray<Real> &bcc);
@@ -101,6 +104,8 @@ public:
   void ThermalFlux_anisoCGLFFT(const AthenaArray<Real> &p,const AthenaArray<Real> &c,
                                AthenaArray<Real> *flx,
                                  const FaceField &b, const AthenaArray<Real> &bcc);
+  // Mean cs and density for initial step
+  void SetMeanSoundSpeedFFT(AthenaArray<Real> &p);
 
 private:
   MeshBlock *pmb_;    // ptr to meshblock containing this HydroDiffusion
@@ -110,14 +115,14 @@ private:
   AthenaArray<Real> x1area_,x2area_,x2area_p1_,x3area_,x3area_p1_;
   AthenaArray<Real> vol_;
   AthenaArray<Real> fx_,fy_,fz_;
-  AthenaArray<Real> dx1_,dx2_,dx3_;
+  AthenaArray<Real> dx_;
   AthenaArray<Real> nu_tot_,kappa_tot_;
   AthenaArray<Real> bmagcc_; // Cell centered |B| to speed up LF calculation
   
   // For use in Landau fluid CFL limit
-  Real csprl_, rhomean_, nu_c_;
+  Real csprl_, densmean_, nu_c_;
   Real *bhat_mean_;
-  AthenaArray<Real> csprl_iloop_, rhomean_iloop_;
+  AthenaArray<Real> csprl_iloop_, densmean_iloop_;
   Real sqrt_twopi_, threepi_m_eight_;
 
   // functions pointer to calculate spatial dependent coefficients

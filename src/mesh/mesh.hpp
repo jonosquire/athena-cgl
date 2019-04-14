@@ -43,7 +43,7 @@ class EquationOfState;
 class FFTDriver;
 class FFTGravityDriver;
 class TurbulenceDriver;
-class FFTConductionDriver;
+class FFTConduction;
 class ConductionBoundaryValues;
 
 //----------------------------------------------------------------------------------------
@@ -158,7 +158,7 @@ class Mesh {
   friend class HydroDiffusion;
   friend class FieldDiffusion;
   friend class ConductionBoundaryValues;
-  friend class FFTConductionDriver;
+  friend class FFTConduction;
 #ifdef HDF5OUTPUT
   friend class ATHDF5Output;
 #endif
@@ -188,10 +188,9 @@ public:
 
   TurbulenceDriver *ptrbd;
   FFTGravityDriver *pfgrd;
-  FFTConductionDriver *pfcondd;
   MGGravityDriver *pmgrd;
   
-  bool fft_for_conduction;
+  bool fft_for_conduction; // Use fft for CGL conduction calculation. Requires BC call
 
   AthenaArray<Real> *ruser_mesh_data;
   AthenaArray<int> *iuser_mesh_data;

@@ -509,7 +509,7 @@ void TimeIntegratorTaskList::AddTimeIntegratorTask(uint64_t id, uint64_t dep) {
     case (CALC_COND_FFT):
       task_list_[ntasks].TaskFunc=
       static_cast<enum TaskStatus (TaskList::*)(MeshBlock*,int)>
-      (&TimeIntegratorTaskList::FFTConduction);
+      (&TimeIntegratorTaskList::LFConductionFFT);
       break;
     case (SEND_COND_BND):
       task_list_[ntasks].TaskFunc=
@@ -913,7 +913,7 @@ enum TaskStatus TimeIntegratorTaskList::PhysicalBoundary(MeshBlock *pmb, int sta
 }
 
 enum TaskStatus TimeIntegratorTaskList::CGLCollisions(MeshBlock *pmb, int stage) {
-  if (stage != nstages) return TASK_SUCCESS; // only do on last stage
+//  if (stage != nstages) return TASK_SUCCESS; // only do on last stage
   Hydro *phydro=pmb->phydro;
   Field *pfield=pmb->pfield;
   BoundaryValues *pbval=pmb->pbval;
@@ -925,9 +925,9 @@ enum TaskStatus TimeIntegratorTaskList::CGLCollisions(MeshBlock *pmb, int stage)
   if (pbval->nblevel[0][1][1] != -1) kl-=NGHOST;
   if (pbval->nblevel[2][1][1] != -1) ku+=NGHOST;
   
-  if (stage <= nstages) {
-    // Scaled coefficient for RHS time-advance within stage
-    Real dt = pmb->pmy_mesh->dt;
+   if (stage <= nstages) {
+//    Real dt = pmb->pmy_mesh->dt;
+    Real dt = (stage_wghts[(stage-1)].beta)*(pmb->pmy_mesh->dt);
     // For VL and RK2 integrators, u1 is un (u at start of time step) at end.
     //  Need the primitives for this. Put into w1 (may cause problems with GR,
     //  but incompatible anyway).
@@ -940,14 +940,15 @@ enum TaskStatus TimeIntegratorTaskList::CGLCollisions(MeshBlock *pmb, int stage)
                           dt, il, iu, jl, ju, kl, ku);
     // Update conserved variables again.
     pmb->peos->PrimitiveToConserved(phydro->w,pfield->bcc, phydro->u, pmb->pcoord,
-                                    il, iu, jl, ju, kl, ku);
-    return TASK_SUCCESS;
+                                  il, iu, jl, ju, kl, ku);
   } else {
-    return TASK_FAIL;
-  }
+     return TASK_FAIL;
+   }
+     
+  return TASK_SUCCESS;
 }
 
-enum TaskStatus TimeIntegratorTaskList::FFTConduction(MeshBlock *pmb, int stage) {
+enum TaskStatus TimeIntegratorTaskList::LFConductionFFT(MeshBlock *pmb, int stage) {
   if (stage <= nstages) {
     Hydro *ph=pmb->phydro;
     Field *pf=pmb->pfield;

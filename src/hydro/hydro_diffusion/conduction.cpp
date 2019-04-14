@@ -11,6 +11,7 @@
 #include <string>     // c_str()
 
 // Athena++ headers
+#include "../../globals.hpp"
 #include "hydro_diffusion.hpp"
 #include "../../athena.hpp"
 #include "../../athena_arrays.hpp"
@@ -163,47 +164,20 @@ void HydroDiffusion::CalcParallelGradientsFFT(const AthenaArray<Real> &prim,
       }
     }
   }
-  // Compute mean quantities to use in Fourier operator.
-  // meandata={|bhx1|,|bhx2|,|bhx3|,rho,cs_prl,nu_c}
-  Real meandata[6] = {0}, gmean[6];
+  // Compute mean quantities across meshblock to use in Fourier operator.
+  csprl_ = 0.0;
+  densmean_ = 0.0;
   for (int k=ks; k<=ke; ++k) {
     for (int j=js; j<=je; ++j) {
       for (int i=is; i<=ie; ++i) {
-        meandata[0] += bcc(IB1,k,j,i);
-        meandata[1] += bcc(IB2,k,j,i);
-        meandata[2] += bcc(IB3,k,j,i);
-        meandata[3] += prim(IDN,k,j,i);
-        meandata[4] += prim(IPR,k,j,i)/prim(IDN,k,j,i);
-      }
-    }
-  }
+        densmean_ += prim(IDN,k,j,i);
+        csprl_ += prim(IPR,k,j,i)/prim(IDN,k,j,i);
+  }}}
   
-#ifdef MPI_PARALLEL
-  // Sum the mean field, cs_prl, rho over all processors
-  int mpierr = MPI_Allreduce(meandata, gmean, 5, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
-  if (mpierr) {
-    std::stringstream msg;
-    msg << "[normalize]: MPI_Allreduce error = "
-    << mpierr << std::endl;
-    throw std::runtime_error(msg.str().c_str());
-  }
-  for (int n=0; n<5; n++) meandata[n]=gmean[n];
-#endif // MPI_PARALLEL
-  for (int n=0; n<5; n++) meandata[n] /= (pmb_->pmy_mesh->mesh_size.nx1 *
-                                          pmb_->pmy_mesh->mesh_size.nx2 *
-                                          pmb_->pmy_mesh->mesh_size.nx3);
-  meandata[4] = std::sqrt(meandata[4]);
-  meandata[5] = nu_c;
-  // meandata[0-2] is a unit vector direction for 1/|b0.k|
-  Real meanb_mag = std::sqrt( SQR(meandata[0]) + SQR(meandata[1]) + SQR(meandata[2]));
-  for (int n=0;n<3;n++) meandata[n] /= meanb_mag;
-  meandata[0]=0;meandata[1]=1.;meandata[2]=0.;
-//  std::cout << "bhat=" <<meandata[0]<<","<<meandata[1]<<","<<meandata[2]<<"\n";
-  
-  // Need details of 1/|b0.k| operator for CFL limit
-  for (int n=0;n<3;n++) bhat_mean_[n] = meandata[n];
-  csprl_ = meandata[4];
-  rhomean_ = meandata[3];
+  Real nblock = pmb_->block_size.nx1*pmb_->block_size.nx2*pmb_->block_size.nx3;
+  csprl_ /= nblock;
+  csprl_ = std::sqrt(csprl_);
+  densmean_ /= nblock;
   nu_c_ = nu_c;
   
   // Compute cell centered derivatives along the field lines
@@ -317,29 +291,29 @@ void HydroDiffusion::CalcParallelGradientsFFT(const AthenaArray<Real> &prim,
   
   // Apply -2cs_prl^2/(sqrt(2pi)*cs_prl*|B0.k| + nu_c) operator for Tprp and B
   // -8cs_prl^2/(sqrt(8pi)*cs_prl*|B0.k| + (3pi-8)nu_c) operator for Tprl
-//  bool print = true;
-//  if (print){
-//    int k=0, j=0;
-//    MPI_Barrier(MPI_COMM_WORLD);
-//    if (Globals::my_rank == 0) {
-//      std::cout << "Before dprl_tprl p1 " <<  meandata[0] << " " <<  meandata[1] << " " <<  meandata[2] <<" " <<  meandata[3] << " " <<  meandata[4] << " " <<  meandata[5] <<  "\n";
-//      for (int i=is-1; i<=ie+1; ++i) {
-//        std::cout << dprl_cond(ICPR,k,j,i) << ", ";
-//      }
-//      std::cout << "\n";
-//    }
-//    MPI_Barrier(MPI_COMM_WORLD);
-//    if (Globals::my_rank == 1) {
-//      std::cout << "Before dprl_tprl p2 " <<  meandata[0] << " " <<  meandata[1] << " " <<  meandata[2] << "\n";
-//      for (int i=is-1; i<=ie+1; ++i) {
-//        std::cout << dprl_cond(ICPR,k,j,i) << ", ";
-//      }
-//      std::cout << "\n";
-//    }
-//  }
+  bool print = false;
+  if (print){
+    int k=3, j=6, i=6;
+    if (Globals::my_rank == 0) {
+      std::cout << "Before dprl_tprl p1 -- " ;
+      for (int j=js-1; j<=je+1; ++j) { //i=is-1; i<=ie+1; ++i      k=ks-1; k<=ke+1; ++k
+        std::cout << dprl_cond(ICPR,k,j,i) << ", ";
+      }
+      std::cout << "\n";
+    }
+#ifdef MPI_PARALLEL
+    MPI_Barrier(MPI_COMM_WORLD);
+    if (Globals::my_rank == 1) {
+      std::cout << "Before dprl_tprl p2 -- ";
+      for (int i=is-1; i<=ie+1; ++i) {
+        std::cout << dprl_cond(ICPR,k,j,i) << ", ";
+      }
+      std::cout << "\n";
+    }
+#endif
+  }
   
-  int mode = 0;
-  pmb_->pmy_mesh->pfcondd->Solve( mode, meandata);
+  pfcondd->Solve(csprl_, densmean_, nu_c_);
   
   // Code to test just using kL -- to delete (or could delete kL code...)
 //  Real prlmult[2], prpmult[2];
@@ -363,25 +337,26 @@ void HydroDiffusion::CalcParallelGradientsFFT(const AthenaArray<Real> &prim,
 //  }
   // Compute
   
-//  if (print){
-//    int k=0, j=0;
-//    MPI_Barrier(MPI_COMM_WORLD);
-//    if (Globals::my_rank == 0) {
-//      std::cout << "After dprl_tprl p1 ";
-//      for (int i=is-1; i<=ie+1; ++i) {
-//        std::cout << dprl_cond(ICPR,k,j,i) << ", ";
-//      }
-//      std::cout << "\n";
-//    }
-//    MPI_Barrier(MPI_COMM_WORLD);
-//    if (Globals::my_rank == 1) {
-//      std::cout << "After dprl_tprl p2 ";
-//      for (int i=is-1; i<=ie+1; ++i) {
-//        std::cout << dprl_cond(ICPR,k,j,i) << ", ";
-//      }
-//      std::cout << "\n";
-//    }
-//  }
+  if (print){
+    int i=6, k=3, j=6;
+    if (Globals::my_rank == 0) {
+      std::cout << "After dprl_tprl p1 ";
+      for (int j=js-1; j<=je+1; ++j) {
+        std::cout << dprl_cond(ICPR,k,j,i) << ", ";
+      }
+      std::cout << "\n";
+    }
+#ifdef MPI_PARALLEL
+    MPI_Barrier(MPI_COMM_WORLD);
+    if (Globals::my_rank == 1) {
+      std::cout << "After dprl_tprl p2 ";
+      for (int i=is-1; i<=ie+1; ++i) {
+        std::cout << dprl_cond(ICPR,k,j,i) << ", ";
+      }
+      std::cout << "\n";
+    }
+#endif
+  }
 
   // After solve computes operators using FFT, boundary calls are handled through the
   // ConductionBoundaryValues class
@@ -404,26 +379,27 @@ void HydroDiffusion::ThermalFlux_anisoCGLFFT(const AthenaArray<Real> &prim,const
   AthenaArray<Real> &x3flux=cndflx[X3DIR];
   
 
-//  bool print = true;
-//  if (print){
-//    int k=0, j=0;
-////    MPI_Barrier(MPI_COMM_WORLD);
-//    if (Globals::my_rank == 0) {
-//      std::cout << "After bvals dprl_tprl p1 ";
-//      for (int i=is-1; i<=ie+1; ++i) {
-//        std::cout << dprl_cond(ICPR,k,j,i) << ", ";
-//      }
-//      std::cout << "\n";
-//    }
-//    MPI_Barrier(MPI_COMM_WORLD);
-//    if (Globals::my_rank == 1) {
-//      std::cout << "After bvals dprl_tprl p2 ";
-//      for (int i=is-1; i<=ie+1; ++i) {
-//        std::cout << dprl_cond(ICPR,k,j,i) << ", ";
-//      }
-//      std::cout << "\n";
-//    }
-//  }
+  bool print = false;
+  if (print){
+    int i=6, j=6, k=3;
+    if (Globals::my_rank == 0) {
+      std::cout << "After bvals dprl_tprl p1 ";
+      for (int j=js-1; j<=je+1; ++j) {
+        std::cout << dprl_cond(ICPR,k,j,i) << ", ";
+      }
+      std::cout << "\n";
+    }
+#ifdef MPI_PARALLEL
+    MPI_Barrier(MPI_COMM_WORLD);
+    if (Globals::my_rank == 1) {
+      std::cout << "After bvals dprl_tprl p2 ";
+      for (int i=is-1; i<=ie+1; ++i) {
+        std::cout << dprl_cond(ICPR,k,j,i) << ", ";
+      }
+      std::cout << "\n";
+    }
+#endif
+  }
   
   // Form heat fluxes in each direction
   // i-direction
@@ -584,8 +560,6 @@ void HydroDiffusion::ThermalFlux_anisoCGL(const AthenaArray<Real> &prim,const At
           Real pprp = 0.5*(prim(IPP,k,j,i) + prim(IPP,k,j,i-1));
           Real csprl2 = 0.5*(dprl_cond(ICPR,k,j,i) + dprl_cond(ICPR,k,j,i-1));
           Real csprl = std::sqrt(csprl2);
-          csprl_iloop_(i) = csprl;
-          rhomean_iloop_(i) = rho;
           
           Real dx = pco_->dx1v(i-1);
           Real dy = 0.5*(pco_->dx2v(j-1) + pco_->dx2v(j));
@@ -642,11 +616,6 @@ void HydroDiffusion::ThermalFlux_anisoCGL(const AthenaArray<Real> &prim,const At
           x1flux(FLXEN,k,j,i) += bhx*(qprp + qprl/2.);
           x1flux(FLXMU,k,j,i) += bhx * qprp / bmag;
         }
-        // CFL conditions using the same idea as the FFT version
-        for (int i=is; i<=ie+1; ++i) {
-          csprl_ = std::max(csprl_iloop_(i),csprl_);
-          rhomean_ = std::max(rhomean_iloop_(i),rhomean_);
-        }
       }}
   } else if (pmb_->block_size.nx2 > 1) { // 2D
     int k=0;
@@ -669,8 +638,6 @@ void HydroDiffusion::ThermalFlux_anisoCGL(const AthenaArray<Real> &prim,const At
         Real pprp = 0.5*(prim(IPP,k,j,i) + prim(IPP,k,j,i-1));
         Real csprl2 = 0.5*(dprl_cond(ICPR,k,j,i) + dprl_cond(ICPR,k,j,i-1));
         Real csprl = std::sqrt(csprl2);
-        csprl_iloop_(i) = csprl;
-        rhomean_iloop_(i) = rho;
         
         Real dx = pco_->dx1v(i-1);
         Real dy = 0.5*(pco_->dx2v(j-1) + pco_->dx2v(j));
@@ -709,11 +676,6 @@ void HydroDiffusion::ThermalFlux_anisoCGL(const AthenaArray<Real> &prim,const At
         x1flux(FLXEN,k,j,i) += bhx*(qprp + qprl/2.);
         x1flux(FLXMU,k,j,i) += bhx * qprp / bmag;
       }
-      // CFL conditions using the same idea as the FFT version
-      for (int i=is; i<=ie+1; ++i) {
-        csprl_ = std::max(csprl_iloop_(i),csprl_);
-        rhomean_ = std::max(rhomean_iloop_(i),rhomean_);
-      }
     }
   } else { // 1D
     int k=0, j=0;
@@ -735,9 +697,7 @@ void HydroDiffusion::ThermalFlux_anisoCGL(const AthenaArray<Real> &prim,const At
       Real pprp = 0.5*(prim(IPP,k,j,i) + prim(IPP,k,j,i-1));
       Real csprl2 = 0.5*(dprl_cond(ICPR,k,j,i) + dprl_cond(ICPR,k,j,i-1));
       Real csprl = std::sqrt(csprl2);
-      csprl_iloop_(i) = csprl;
-      rhomean_iloop_(i) = rho;
-      
+
       Real dx = pco_->dx1v(i-1);
       
       // x gradients at i-1/2 j k
@@ -756,11 +716,6 @@ void HydroDiffusion::ThermalFlux_anisoCGL(const AthenaArray<Real> &prim,const At
       
       x1flux(FLXEN,k,j,i) += bhx*(qprp + qprl/2.);
       x1flux(FLXMU,k,j,i) += bhx * qprp / bmag;
-    }
-    // CFL conditions using the same idea as the FFT version
-    for (int i=is; i<=ie+1; ++i) {
-      csprl_ = std::max(csprl_iloop_(i),csprl_);
-      rhomean_ = std::max(rhomean_iloop_(i),rhomean_);
     }
   }
   

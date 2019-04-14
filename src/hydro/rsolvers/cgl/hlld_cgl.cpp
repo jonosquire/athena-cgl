@@ -22,7 +22,7 @@
 #include "../../../eos/eos.hpp"
 
 // container to store (density, momentum, tranverse magnetic field)
-// minimizes changes required to adopt athena4.2 version of this solver
+// minimizes changes required to adopt hlld_iso solver
 typedef struct Cons1D {
   Real d,mx,my,mz,e,mu,by,bz;
 } Cons1D;
@@ -52,7 +52,7 @@ void Hydro::RiemannSolver(const int kl, const int ku, const int jl, const int ju
   // Number of Newton-Raphson iterations to solve for (pp-pl)/B^2
   const int num_newton_iter = 4;
   // Threshold between fhr and fhl to use Newton-Raphson iteration
-  const Real thresh_newton_iter = 1e-10;
+  const Real thresh_newton_iter = 1e10;
   // Note: tests suggest that the NR solver doesn't really help much.
   //  It basically just makes it more likely to crash without an obvious
   //  gain in accuracy
@@ -177,6 +177,15 @@ void Hydro::RiemannSolver(const int kl, const int ku, const int jl, const int ju
         Real ehll  = (spd[4]*ur.e  - spd[0]*ul.e  - fr.e  + fl.e )*idspd;
         Real muhll = (spd[4]*ur.mu - spd[0]*ul.mu - fr.mu + fl.mu)*idspd;
         
+        Real myhll = (spd[4]*ur.my - spd[0]*ul.my - fr.my + fl.my)*idspd;
+        Real mzhll = (spd[4]*ur.mz - spd[0]*ul.mz - fr.mz + fl.mz)*idspd;
+        Real byhll = (spd[4]*ur.by - spd[0]*ul.by - fr.by + fl.by)*idspd;
+        Real bzhll = (spd[4]*ur.bz - spd[0]*ul.bz - fr.bz + fl.bz)*idspd;
+        Real bsqhll = bxsq + byhll*byhll + bzhll*bzhll;
+        Real dphll = 3.*muhll*std::sqrt(bsqhll) - 2.0*ehll + bsqhll +
+                        (fdhll*ustar + myhll*myhll/dhll + mzhll*mzhll/dhll);
+        
+        
         // If fh = 1+∆p/B^2 is close to zero, we'll switch to just using HLL for all
         // variables. There is no Alfven wave in this case.
         if ( !( (fhl < fh_floor) || (fhr < fh_floor) ) ) {
@@ -185,50 +194,52 @@ void Hydro::RiemannSolver(const int kl, const int ku, const int jl, const int ju
           // to be constant across the central region.
           // Compute by solving nonlinear equation from fmxhll, using B^2=sqrt(B*L^2*B*R^2)
           // from Mignone (32)-(33)
-          Real fhstar;
-          if (bxsq > SMALL_NUMBER*(bsql + bsqr)){
-            // Only run nonlinear solve if left and right states very different
-            fhstar = 0.5*(fhr+fhl); // Initial guess 
-            if ( fabs(fhr - fhl) > thresh_newton_iter){
-              // Start by computing unchanging auxilliary variables for the iteration
-              Real slul = spd[0] - wli[IVX], srur = spd[4] - wri[IVX];
-              Real slus = spd[0] - ustar, srus = spd[4] - ustar;
-              Real al = dhll*SQR(slus) / bxsq;
-              Real ar = dhll*SQR(srus) / bxsq;
-              Real a_full = std::sqrt((bsql - bxsq)*(bsqr - bxsq))/( SQR(bxsq) ) *
-                      fabs( SQR(slul)*ul.d - bxsq*fhl) * (SQR(srur)*ur.d - bxsq*fhr );
-              Real frhou_fmx_bx = fdhll*ustar - fmxhll + 0.5*bxsq;
-              // Newton Raphson iteration for 1 + Dp/B^2
-    //          std::cout << "NR init L=" << fhl << ": NR init R=" << fhr <<"\n";
-              for (int n = 0; n < num_newton_iter; ++n) {
-                Real aldpardp = fabs( (al - fhstar) * (ar - fhstar) );
-                Real aral_aldpardp = 0.5 * (ar + al - 2*fhstar) / SQR(aldpardp);
-                Real bmag_guess = std::sqrt( bxsq + a_full/aldpardp );
-                // Function to minimize, divided by its derivative
-                Real f0 = (frhou_fmx_bx + muhll*bmag_guess - bxsq*fhstar + 0.5*a_full/aldpardp);
-                Real delta_dp =  -f0 /
-                      (-bxsq + 0.5*a_full*bxsq*aral_aldpardp + a_full*muhll*aral_aldpardp/bmag_guess);
-                fhstar += delta_dp;
-    //            std::cout << n << " f0="<< f0 <<", dp=" << delta_dp << ": ";
-              }
-    //          std::cout << "\nNR final " << fhstar << "\n";
-            }
-          } else { // Need a special case for small Bx --
-            // solve from ehll = pprp + pprl/2 + B^2/2 + rho*v^2/2
-            Real slul = spd[0] - wli[IVX], srur = spd[4] - wri[IVX];
-            Real slus = spd[0] - ustar, srus = spd[4] - ustar;
-            // Estimate B^2 and rho u^2 from geometric averages
-            Real bsq_star = std::sqrt(bsql * bsqr) * fabs(slul*srur/slus/srus);
-            Real ke_star = 0.5*dhll*(SQR(ustar) + std::sqrt( (SQR(wli[IVY]) + SQR(wli[IVZ]))*
-                                                        (SQR(wri[IVY]) + SQR(wri[IVZ])) ) );
-            fhstar = 1 - 2./bsq_star*(ehll - 1.5*muhll*std::sqrt(bsq_star) -
-                                  0.5*bsq_star - ke_star);
-          }
+          Real fhstar = 1. + dphll / bsqhll; // Initial guess
+//          fhstar = 0.5*(fhr+fhl);
+          
+//          if (bxsq > SMALL_NUMBER*(bsql + bsqr)){
+//            // Only run nonlinear solve if left and right states very different
+//            fhstar = 0.5*(fhr+fhl); // Initial guess
+//            if ( fabs(fhr - fhl) > thresh_newton_iter){
+//              // Start by computing unchanging auxilliary variables for the iteration
+//              Real slul = spd[0] - wli[IVX], srur = spd[4] - wri[IVX];
+//              Real slus = spd[0] - ustar, srus = spd[4] - ustar;
+//              Real al = dhll*SQR(slus) / bxsq;
+//              Real ar = dhll*SQR(srus) / bxsq;
+//              Real a_full = std::sqrt((bsql - bxsq)*(bsqr - bxsq))/( SQR(bxsq) ) *
+//                      fabs( SQR(slul)*ul.d - bxsq*fhl) * (SQR(srur)*ur.d - bxsq*fhr );
+//              Real frhou_fmx_bx = fdhll*ustar - fmxhll + 0.5*bxsq;
+//              // Newton Raphson iteration for 1 + Dp/B^2
+//    //          std::cout << "NR init L=" << fhl << ": NR init R=" << fhr <<"\n";
+//              for (int n = 0; n < num_newton_iter; ++n) {
+//                Real aldpardp = fabs( (al - fhstar) * (ar - fhstar) );
+//                Real aral_aldpardp = 0.5 * (ar + al - 2*fhstar) / SQR(aldpardp);
+//                Real bmag_guess = std::sqrt( bxsq + a_full/aldpardp );
+//                // Function to minimize, divided by its derivative
+//                Real f0 = (frhou_fmx_bx + muhll*bmag_guess - bxsq*fhstar + 0.5*a_full/aldpardp);
+//                Real delta_dp =  -f0 /
+//                      (-bxsq + 0.5*a_full*bxsq*aral_aldpardp + a_full*muhll*aral_aldpardp/bmag_guess);
+//                fhstar += delta_dp;
+//    //            std::cout << n << " f0="<< f0 <<", dp=" << delta_dp << ": ";
+//              }
+//    //          std::cout << "\nNR final " << fhstar << "\n";
+//            }
+//          } else { // Need a special case for small Bx --
+//            // solve from ehll = pprp + pprl/2 + B^2/2 + rho*v^2/2
+//            Real slul = spd[0] - wli[IVX], srur = spd[4] - wri[IVX];
+//            Real slus = spd[0] - ustar, srus = spd[4] - ustar;
+//            // Estimate B^2 and rho u^2 from geometric averages
+//            Real bsq_star = std::sqrt(bsql * bsqr) * fabs(slul*srur/slus/srus);
+//            Real ke_star = 0.5*dhll*(SQR(ustar) + std::sqrt( (SQR(wli[IVY]) + SQR(wli[IVZ]))*
+//                                                        (SQR(wri[IVY]) + SQR(wri[IVZ])) ) );
+//            fhstar = 1 - 2./bsq_star*(ehll - 1.5*muhll*std::sqrt(bsq_star) -
+//                                  0.5*bsq_star - ke_star);
+//          }
           //--- Step 4.9  Compute S*_L and S*_R, Alfven discontinuity speeds
 //          std::cout << i <<":"<< std::sqrt(fhstar) << ", " ;
-          Real sqrt_dpstar = fhstar > 0.0 ? std::sqrt(fhstar) : 0.0;
-          spd[1] = ustar - fabs(bxi)*sqrt_dpstar/sqrtdhll;
-          spd[3] = ustar + fabs(bxi)*sqrt_dpstar/sqrtdhll;
+          Real sqrt_fhstar = fhstar > 0.0 ? std::sqrt(fhstar) : 0.0;
+          spd[1] = ustar - fabs(bxi)*sqrt_fhstar/sqrtdhll;
+          spd[3] = ustar + fabs(bxi)*sqrt_fhstar/sqrtdhll;
           
           //--- Step 5. Compute intermediate states
           
@@ -255,6 +266,11 @@ void Hydro::RiemannSolver(const int kl, const int ku, const int jl, const int ju
             ulst.by = ul.by*bfact; // eqn. (32) of Mignone
             ulst.bz = ul.bz*bfact; // eqn. (33) of Mignone
           }
+          //DELETE
+//          ulst.my = myhll; // eqn. (30) of Mignone
+//          ulst.mz = mzhll; // eqn. (31) of Mignone
+//          ulst.by = byhll; // eqn. (32) of Mignone
+//          ulst.bz = bzhll;
           
           // Ur* - eqn. (20) of Mignone */
           urst.d  = dhll;
@@ -278,9 +294,14 @@ void Hydro::RiemannSolver(const int kl, const int ku, const int jl, const int ju
             urst.by = ur.by*bfact; // eqn. (32) of Mignone
             urst.bz = ur.bz*bfact; // eqn. (33) of Mignone
           }
+          //DELETE
+//          urst.my = myhll; // eqn. (30) of Mignone
+//          urst.mz = mzhll; // eqn. (31) of Mignone
+//          urst.by = byhll; // eqn. (32) of Mignone
+//          urst.bz = bzhll;
           
           // Uc*
-          Real x = sqrt_dpstar*sqrtdhll*(bxi > 0.0 ? 1.0 : -1.0); // from below eqn. (37) of Mignone
+          Real x = sqrt_fhstar*sqrtdhll*(bxi > 0.0 ? 1.0 : -1.0); // from below eqn. (37) of Mignone
           ucst.d  = dhll;  // eqn. (20) of Mignone
           ucst.mx = mxhll; // eqn. (24) of Mignone
           ucst.e  = ehll;
@@ -290,10 +311,21 @@ void Hydro::RiemannSolver(const int kl, const int ku, const int jl, const int ju
           ucst.by = 0.5*(ulst.by + urst.by + (urst.my-ulst.my)/x); // eqn. (36) of Mignone
           ucst.bz = 0.5*(ulst.bz + urst.bz + (urst.mz-ulst.mz)/x); // eqn. (37) of Mignone
 
+          //DELETE
+          // Compute u,v,by,bz HLL fluxes
+          Real fmyhll = (spd[4]*fl.my - spd[0]*fr.my + spd[4]*spd[0]*(ur.my-ul.my))*idspd;
+          Real fmzhll = (spd[4]*fl.mz - spd[0]*fr.mz + spd[4]*spd[0]*(ur.mz-ul.mz))*idspd;
+          Real fbyhll = (spd[4]*fl.by - spd[0]*fr.by + spd[4]*spd[0]*(ur.by-ul.by))*idspd;
+          Real fbzhll = (spd[4]*fl.bz - spd[0]*fr.bz + spd[4]*spd[0]*(ur.bz-ul.bz))*idspd;
+          
+//          if (j==6 && k==6)
+//            std::cout << "bsqhll="<< bsqhll-bxsq <<", bsl="<< SQR(ulst.by)+SQR(ulst.bz) <<", bsr="<< SQR(urst.by)+SQR(urst.bz) << " -- ";
+          
           
           //--- Step 6.  Compute flux
           
           if (spd[0] >= 0.0) {
+//            std::cout << "f-2,"<<ivx<<" - ";
             // return Fl if flow is supersonic, eqn. (38a) of Mignone
             flxi[IDN] = fl.d;
             flxi[IVX] = fl.mx;
@@ -304,6 +336,7 @@ void Hydro::RiemannSolver(const int kl, const int ku, const int jl, const int ju
             flxi[IBY] = fl.by;
             flxi[IBZ] = fl.bz;
           } else if (spd[4] <= 0.0) {
+//            std::cout << "f2,"<<ivx<<" - ";
             // return Fr if flow is supersonic, eqn. (38e) of Mignone
             flxi[IDN] = fr.d;
             flxi[IVX] = fr.mx;
@@ -314,6 +347,7 @@ void Hydro::RiemannSolver(const int kl, const int ku, const int jl, const int ju
             flxi[IBY] = fr.by;
             flxi[IBZ] = fr.bz;
           } else if (spd[1] >= 0.0) {
+//            std::cout << "f-1,"<<ivx<<" - ";
             // return (Fl+Sl*(Ulst-Ul)), eqn. (38b) of Mignone
             flxi[IDN] = fl.d  + spd[0]*(ulst.d  - ul.d);
             flxi[IVX] = fl.mx + spd[0]*(ulst.mx - ul.mx);
@@ -324,6 +358,7 @@ void Hydro::RiemannSolver(const int kl, const int ku, const int jl, const int ju
             flxi[IBY] = fl.by + spd[0]*(ulst.by - ul.by);
             flxi[IBZ] = fl.bz + spd[0]*(ulst.bz - ul.bz);
           } else if (spd[3] <= 0.0) {
+//            std::cout << "f1,"<<ivx<<" - ";
             // return (Fr+Sr*(Urst-Ur)), eqn. (38d) of Mignone
             flxi[IDN] = fr.d  + spd[4]*(urst.d  - ur.d);
             flxi[IVX] = fr.mx + spd[4]*(urst.mx - ur.mx);
@@ -334,15 +369,16 @@ void Hydro::RiemannSolver(const int kl, const int ku, const int jl, const int ju
             flxi[IBY] = fr.by + spd[4]*(urst.by - ur.by);
             flxi[IBZ] = fr.bz + spd[4]*(urst.bz - ur.bz);
           } else {
+//            std::cout << "f0,"<<ivx<<" - ";
             // return Fcst, eqn. (38c) of Mignone, using eqn. (24)
             flxi[IDN] = fdhll;
             flxi[IVX] = fmxhll;
-            flxi[IVY] = ucst.my*ustar - bxi*ucst.by*fhstar;
-            flxi[IVZ] = ucst.mz*ustar - bxi*ucst.bz*fhstar;
+            flxi[IVY] = ucst.my*ustar - bxi*ucst.by*fhstar;//fmyhll;//
+            flxi[IVZ] = ucst.mz*ustar - bxi*ucst.bz*fhstar; //fmzhll;//
             flxi[IPR] = fehll;
             flxi[IPP] = fmuhll;
-            flxi[IBY] = ucst.by*ustar - bxi*ucst.my/ucst.d;
-            flxi[IBZ] = ucst.bz*ustar - bxi*ucst.mz/ucst.d;
+            flxi[IBY] = ucst.by*ustar - bxi*ucst.my/ucst.d; //fbyhll;//
+            flxi[IBZ] = ucst.bz*ustar - bxi*ucst.mz/ucst.d;//  fbzhll;//
           }
         } else { // ( !((fhl < fh_floor) || (fhr < fh_floor)) )
           // If 1 + ∆p/B^2 ~< 0, the Alfven wave  is non-propagating/unstable.

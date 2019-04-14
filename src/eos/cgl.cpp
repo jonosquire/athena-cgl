@@ -96,7 +96,7 @@ void EquationOfState::ConservedToPrimitive(AthenaArray<Real> &cons,
         // Might want to throw an error here or something...
         
         w_pp = bmag*u_mu;
-        w_p = 2.0*(u_e - ke - pb - w_pp); //0.66666667*(u_e - ke - pb); //
+        w_p = 2.0*(u_e - ke - pb - w_pp);  //0.66666667*(u_e - ke - pb);
         
         // apply pressure floor, correct total energy
         w_p = (w_p > pressure_floor_) ?  w_p : pressure_floor_;
@@ -153,7 +153,7 @@ void EquationOfState::PrimitiveToConserved(const AthenaArray<Real> &prim,
         u_m2 = w_vy*w_d;
         u_m3 = w_vz*w_d;
 //        u_e = w_p*1.5 + 0.5*(w_d*(SQR(w_vx) + SQR(w_vy) + SQR(w_vz))  + bsqr );
-        u_e = 0.5*w_p + w_pp + 0.5*(w_d*(SQR(w_vx) + SQR(w_vy) + SQR(w_vz)) + bsqr);
+        u_e = 0.5*w_p + w_pp + 0.5*(w_d*(SQR(w_vx) + SQR(w_vy) + SQR(w_vz)) + bsqr); 
         u_mu = w_pp/bmag;
 
       }
@@ -212,6 +212,10 @@ void EquationOfState::Collisions(AthenaArray<Real> &prim, const AthenaArray<Real
         w_pp_tmp = (ONE_3RD*expdtnu + TWO_3RD)*w_pp + (ONE_3RD - ONE_3RD*expdtnu)*w_pl;
         w_pl = (TWO_3RD - TWO_3RD*expdtnu)*w_pp + (TWO_3RD*expdtnu + ONE_3RD)*w_pl;
         w_pp = w_pp_tmp;
+        
+//        w_pp_tmp = ( TWO_3RD)*w_pp + (ONE_3RD)*w_pl;
+//        w_pl = (TWO_3RD)*w_pp + ( ONE_3RD)*w_pl;
+//        w_pp = w_pp_tmp;
       }
     }}
   }

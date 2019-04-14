@@ -498,10 +498,8 @@ Mesh::Mesh(ParameterInput *pin, int mesh_test) {
     pmgrd = new MGGravityDriver(this, MGBoundaryFunction_, pin);
   
   fft_for_conduction = false;
-  if (CGL_EOS && pblock->phydro->phdif->using_fft_for_conduction) {
-    pfcondd = new FFTConductionDriver(this,pin);
+  if (CGL_EOS && pblock->phydro->phdif->using_fft_for_conduction)
     fft_for_conduction = true;
-  }
 
   if (turb_flag > 0)
     ptrbd = new TurbulenceDriver(this, pin);
@@ -838,10 +836,8 @@ Mesh::Mesh(ParameterInput *pin, IOWrapper& resfile, int mesh_test) {
     pmgrd = new MGGravityDriver(this, MGBoundaryFunction_, pin);
   
   fft_for_conduction = false;
-  if (CGL_EOS && pblock->phydro->phdif->using_fft_for_conduction) {
-    pfcondd = new FFTConductionDriver(this,pin);
+  if (CGL_EOS && pblock->phydro->phdif->using_fft_for_conduction)
     fft_for_conduction = true;
-  }
 
   if (turb_flag > 0)
     ptrbd = new TurbulenceDriver(this, pin);
@@ -864,7 +860,6 @@ Mesh::~Mesh() {
   if (SELF_GRAVITY_ENABLED==1) delete pfgrd;
   else if (SELF_GRAVITY_ENABLED==2) delete pmgrd;
   if (turb_flag > 0) delete ptrbd;
-  if (CGL_EOS && fft_for_conduction==true) delete pfcondd;
   if (adaptive==true) { // deallocate arrays for AMR
     delete [] nref;
     delete [] nderef;
@@ -1381,6 +1376,8 @@ void Mesh::Initialize(int res_flag, ParameterInput *pin) {
         if (pfield->pfdif->field_diffusion_defined)
           pfield->pfdif->SetFieldDiffusivity(phydro->w, pfield->bcc);
       }
+      if (fft_for_conduction)
+        phydro->phdif->SetMeanSoundSpeedFFT(phydro->w);
     }
 
     if ((res_flag==0) && (adaptive==true)) {

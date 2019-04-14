@@ -13,43 +13,43 @@ filename = @(n,oid) [folder '/' file '.out' num2str(oid) '.'  sprintf('%05d',n) 
 
 
 dpstore = [];estore=[];ts = [];
-lims = 1*[-1 1];
+lims = 0.1*[-1 1];
 for nnn = nums
     V = readfunc(filename(nnn,output_id));
     ar = length(V.x)/length(V.y);
     
-%     tp = @(f) f.'-mean(mean(mean(f)));
-%     vars = {'vel2','vel3','Bcc2','Bcc3'};
-%     for kkk=1:length(vars)
-%         subplot(1,length(vars),kkk)
-%         imagesc(V.x,V.y,tp(V.(vars{kkk})(:,:,1)))
-%         pbaspect([ar 1 1])
-%         title(['t = ' num2str(V.t)]);    colorbar
+    tp = @(f) f.';%-mean(mean(mean(f)));
+    vars = {'vel1'};
+    for kkk=1:length(vars)
+        subplot(1,length(vars),kkk)
+        imagesc(V.x,V.y,tp(V.(vars{kkk})(:,:,1)))
+        pbaspect([ar 1 1])
+        title(['t = ' num2str(V.t)]);    colorbar
+    end
+    
+%     if length(V.y)>1
+%         oneD = @(a) a(:,6,1);%@(a) mean(mean(a,2),3);
+%     else 
+%         oneD = @(a) a;%@(a) mean(mean(a,2),3);
 %     end
-    
-    if length(V.y)>1
-        oneD = @(a) a(:,1,1);%@(a) mean(mean(a,2),3);
-    else 
-        oneD = @(a) a;%@(a) mean(mean(a,2),3);
-    end
-    subplot(211)
-    plot(V.x,oneD(V.vel2),V.x,oneD(V.vel3))
-    hold on;
-    ax = gca;ax.ColorOrderIndex = 1;
-    plot(V.x,oneD(V.Bcc2),'--',V.x,oneD(V.Bcc3),'--')
-    hold off
-    ylim(lims)
-    title(['t = ' num2str(V.t)])
-    subplot(212)
-    if isfield(V,'pprp')
-        plot(V.x,oneD((V.pprp-V.pprl)./(V.Bcc1.^2+ V.Bcc2.^2+V.Bcc3.^2)))
-    end
-    ylim([-2 1])
-    
-    dpstore = [dpstore mean(mean(mean(V.pprp-V.pprl)./(V.Bcc1.^2+ V.Bcc2.^2+V.Bcc3.^2)))];
-    ts = [ts V.t];
-    estore =[estore mean(mean(mean(0.5*V.Bcc2.^2 + 0.5*V.rho.*V.vel2.^2)))];
-    
+%     subplot(211)
+%     plot(V.x,oneD(V.vel1),V.x,oneD(V.vel2))
+%     hold on;
+%     ax = gca;ax.ColorOrderIndex = 1;
+%     plot(V.x,oneD(V.Bcc2),'--',V.x,oneD(V.Bcc3),'--')
+%     hold off
+%     ylim(lims)
+%     title(['t = ' num2str(V.t)])
+%     subplot(212)
+%     if isfield(V,'pprp')
+%         plot(V.x,oneD((V.pprp-V.pprl)./(V.Bcc1.^2+ V.Bcc2.^2+V.Bcc3.^2)))
+%     end
+%     ylim([-2 1])
+%     
+%     dpstore = [dpstore mean(mean(mean(V.pprp-V.pprl)./(V.Bcc1.^2+ V.Bcc2.^2+V.Bcc3.^2)))];
+%     ts = [ts V.t];
+%     estore =[estore mean(mean(mean(0.5*V.Bcc2.^2 + 0.5*V.rho.*V.vel2.^2)))];
+%     
     drawnow
     pause(0.1)
 %      ginput(1);

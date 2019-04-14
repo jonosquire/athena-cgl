@@ -71,20 +71,20 @@ rm = @(f,n) repmat(f,[1,n]);
 % P.nxV = [rm([32],3*8)];
 % P.varV = [rm({'mom2'},3*8) ];
 
-% From collisionsTesting_CGL
-P.typesV = [rm({'hlld'},3*8) ];
-P.linearsys = 'hlld';
-P.wavesV = [rm(7,8) rm(4,8) rm(7,8)]; % Alf, slow, fast
-P.nxV = [rm([64],3*8)];
-P.varV = [rm({'mom2'},3*8) ];
+% % From collisionsTesting_CGL
+% P.typesV = [rm({'hlld'},3*8) ];
+% P.linearsys = 'hlld';
+% P.wavesV = [rm(7,8) rm(4,8) rm(7,8)]; % Alf, slow, fast
+% P.nxV = [rm([64],3*8)];
+% P.varV = [rm({'mom2'},3*8) ];
 
-% % From heatFluxTest_CGL
-% P.typesV = [rm({'hlld'},3*1) ];
-% P.wavesV = [rm(7,1) rm(6,1) rm(7,1)]; % Alf, slow, fast
-% P.varV = [rm({'mom1'},3*1) rm({'mom2'},3*1) rm({'mom3'},3*1)];
-% kL = 0*2*pi/sqrt(2);
-% P.klV = [rm([kL],3)];
-% P.nxV = [rm([32],3)];
+% From heatFluxTest_CGL
+P.typesV = [rm({'hlld'},3*1) ];
+P.wavesV = [rm(7,1) rm(6,1) rm(7,1)]; % Alf, slow, fast
+P.varV = [rm({'mom1'},3*1) rm({'mom2'},3*1) rm({'mom3'},3*1)];
+kL = 0*2*pi/sqrt(2);
+P.klV = [rm([kL],3)];
+P.nxV = [rm([32],3)];
 
 
 P.nsims = length( P.typesV );

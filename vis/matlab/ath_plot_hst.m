@@ -1,5 +1,8 @@
 function ath_plot_hst%( fname )
-folder = '~/Research/athena/turb-tests/decay'; % Folder with outputs
+folder = '~/Research/athena/turb-tests/stampede-decay/cglbrag-N64-b128-hlld/'; % Folder with outputs
+% folder = '/Users/jsquire/MountedSSHDrives/thunderbird/athena-cgl-testing/turb-tests/';
+% folder = '~/Research/athena/turb-tests/tmp/';
+folder = '~/Research/athena/turb-tests/decay/';
 file = 'Turb'; % Name of output
 % Plots variables from hst file 
 fulldata = importdata([folder '/' file '.hst']);
@@ -9,7 +12,8 @@ names = names(1:end);
 
 % nums = input(['Choose variables:  ' char(10) strjoin(names,char(10)) char(10)]);
 dat = fulldata.data;
-inds = find_restart_ind(dat(:,1)); % Remove intermediate times between a restart
+% inds = find_restart_ind(dat(:,1)); % Remove intermediate times between a restart
+inds = 1:length(dat);
 t = dat(inds,1);
 vol = 16;
 
@@ -21,7 +25,9 @@ uy = sqrt(2*(dat(inds,8))/vol);uz = sqrt(2*(dat(inds,9))/vol);
 by = sqrt(2*(dat(inds,m1))/vol);bz = sqrt(2*(dat(inds,m2))/vol);
 plot(t,uy,t,uz,t,by,t,bz)
 norm = 2*dat(1,m1-1)/vol;
-semilogy(t,kinetic_energy/norm,t,magnetic_energy/norm, t,(kinetic_energy+magnetic_energy)/norm,'k')%,t,dat(inds,m2-4)/norm,'-')
+semilogy(t,kinetic_energy/norm,t,magnetic_energy/norm,t,(kinetic_energy+magnetic_energy)/norm,'k')%,t,dat(inds,m2-4)/norm,'-')
+
+% semilogy (t, dat(inds,m1-2))
 % legend(names(nums))
 
 

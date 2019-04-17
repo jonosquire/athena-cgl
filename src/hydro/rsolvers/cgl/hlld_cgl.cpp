@@ -46,24 +46,20 @@ void Hydro::RiemannSolver(const int kl, const int ku, const int jl, const int ju
   Real pfloor = pmy_block->peos->GetPressureFloor();
   Real bmag_floor = pmy_block->peos->GetBFieldFloor();
   Real bsq_floor = SQR(bmag_floor);
-  // Floor on 1+∆p/B^2. Used to switch to HLLE Reimann solver.
+  // Value of 1+∆p/B^2 below which we interpolate to HLLE solver
   Real fh_floor = pmy_block->peos->GetFHFloor();
-
-  // Number of Newton-Raphson iterations to solve for (pp-pl)/B^2
-  const int num_newton_iter = 4;
-  // Threshold between fhr and fhl to use Newton-Raphson iteration
-  const Real thresh_newton_iter = 1e10;
-  // Note: tests suggest that the NR solver doesn't really help much.
-  //  It basically just makes it more likely to crash without an obvious
-  //  gain in accuracy
+  //
+  Real anti_diff_alpha = pmy_block->peos->GetAntiDiffAlpha();
   
   for (int k=kl; k<=ku; ++k) {
     for (int j=jl; j<=ju; ++j) {
 #pragma omp simd private(flxi,wli,wri,spd)
       for (int i=il; i<=iu; ++i) {
         Cons1D ul,ur;                   // L/R states, conserved variables (computed)
-        Cons1D ulst,urst,ucst;          // Conserved variable for all states
+        Cons1D hll;            // hll variables
+        Cons1D  ulst, urst;           // L and R starred variables
         Cons1D fl,fr;                   // Fluxes for left & right states
+        Cons1D fhll;                   // HLL flux
         
         //--- Step 1.  Load L/R states into local variables
         
@@ -153,7 +149,7 @@ void Hydro::RiemannSolver(const int kl, const int ku, const int jl, const int ju
         fr.by = ur.by*wri[IVX] - bxi*wri[IVY];
         fr.bz = ur.bz*wri[IVX] - bxi*wri[IVZ];
         
-        //--- Step 4.  Compute hll averages
+        //--- Step 4.  Compute hll fluxes for all variables,
         
         // inverse of difference between right and left signal speeds
         Real idspd = 1.0/(spd[4]-spd[0]);
@@ -164,266 +160,193 @@ void Hydro::RiemannSolver(const int kl, const int ku, const int jl, const int ju
         Real sqrtdhll = std::sqrt(dhll);
         
         // rho, mx, e, and mu components of F^{hll} like from Mignone eqn. (17)
-        Real fdhll  = (spd[4]*fl.d  - spd[0]*fr.d  + spd[4]*spd[0]*(ur.d -ul.d ))*idspd;
-        Real fmxhll = (spd[4]*fl.mx - spd[0]*fr.mx + spd[4]*spd[0]*(ur.mx-ul.mx))*idspd;
-        Real fehll  = (spd[4]*fl.e  - spd[0]*fr.e  + spd[4]*spd[0]*(ur.e -ul.e ))*idspd;
-        Real fmuhll = (spd[4]*fl.mu - spd[0]*fr.mu + spd[4]*spd[0]*(ur.mu-ul.mu))*idspd;
+        fhll.d  = (spd[4]*fl.d  - spd[0]*fr.d  + spd[4]*spd[0]*(ur.d -ul.d ))*idspd;
+        fhll.mx = (spd[4]*fl.mx - spd[0]*fr.mx + spd[4]*spd[0]*(ur.mx-ul.mx))*idspd;
+        fhll.e  = (spd[4]*fl.e  - spd[0]*fr.e  + spd[4]*spd[0]*(ur.e -ul.e ))*idspd;
+        fhll.mu = (spd[4]*fl.mu - spd[0]*fr.mu + spd[4]*spd[0]*(ur.mu-ul.mu))*idspd;
+        fhll.my = (spd[4]*fl.my - spd[0]*fr.my + spd[4]*spd[0]*(ur.my-ul.my))*idspd;
+        fhll.mz = (spd[4]*fl.mz - spd[0]*fr.mz + spd[4]*spd[0]*(ur.mz-ul.mz))*idspd;
+        fhll.by = (spd[4]*fl.by - spd[0]*fr.by + spd[4]*spd[0]*(ur.by-ul.by))*idspd;
+        fhll.bz = (spd[4]*fl.bz - spd[0]*fr.bz + spd[4]*spd[0]*(ur.bz-ul.bz))*idspd;
         
         // ustar from paragraph between eqns. (23) and (24)
-        Real ustar = fdhll/dhll;
+        Real ustar = fhll.d/dhll;
         
         // other components of U^{hll} like Mignone eqn. (15)
         Real mxhll = (spd[4]*ur.mx - spd[0]*ul.mx - fr.mx + fl.mx)*idspd;
         Real ehll  = (spd[4]*ur.e  - spd[0]*ul.e  - fr.e  + fl.e )*idspd;
         Real muhll = (spd[4]*ur.mu - spd[0]*ul.mu - fr.mu + fl.mu)*idspd;
         
+        // Compute fhstar = 1 + Dpstar/B^2_star from hll averages
         Real myhll = (spd[4]*ur.my - spd[0]*ul.my - fr.my + fl.my)*idspd;
         Real mzhll = (spd[4]*ur.mz - spd[0]*ul.mz - fr.mz + fl.mz)*idspd;
         Real byhll = (spd[4]*ur.by - spd[0]*ul.by - fr.by + fl.by)*idspd;
         Real bzhll = (spd[4]*ur.bz - spd[0]*ul.bz - fr.bz + fl.bz)*idspd;
         Real bsqhll = bxsq + byhll*byhll + bzhll*bzhll;
         Real dphll = 3.*muhll*std::sqrt(bsqhll) - 2.0*ehll + bsqhll +
-                        (fdhll*ustar + myhll*myhll/dhll + mzhll*mzhll/dhll);
-        
-        
-        // If fh = 1+∆p/B^2 is close to zero, we'll switch to just using HLL for all
-        // variables. There is no Alfven wave in this case.
-        if ( !( (fhl < fh_floor) || (fhr < fh_floor) ) ) {
-        
-          //--- Step 4.5  Compute dpobsq = 1 + Dp/B^2 in the star region. This is assumed
-          // to be constant across the central region.
-          // Compute by solving nonlinear equation from fmxhll, using B^2=sqrt(B*L^2*B*R^2)
-          // from Mignone (32)-(33)
-          Real fhstar = 1. + dphll / bsqhll; // Initial guess
-//          fhstar = 0.5*(fhr+fhl);
-          
-//          if (bxsq > SMALL_NUMBER*(bsql + bsqr)){
-//            // Only run nonlinear solve if left and right states very different
-//            fhstar = 0.5*(fhr+fhl); // Initial guess
-//            if ( fabs(fhr - fhl) > thresh_newton_iter){
-//              // Start by computing unchanging auxilliary variables for the iteration
-//              Real slul = spd[0] - wli[IVX], srur = spd[4] - wri[IVX];
-//              Real slus = spd[0] - ustar, srus = spd[4] - ustar;
-//              Real al = dhll*SQR(slus) / bxsq;
-//              Real ar = dhll*SQR(srus) / bxsq;
-//              Real a_full = std::sqrt((bsql - bxsq)*(bsqr - bxsq))/( SQR(bxsq) ) *
-//                      fabs( SQR(slul)*ul.d - bxsq*fhl) * (SQR(srur)*ur.d - bxsq*fhr );
-//              Real frhou_fmx_bx = fdhll*ustar - fmxhll + 0.5*bxsq;
-//              // Newton Raphson iteration for 1 + Dp/B^2
-//    //          std::cout << "NR init L=" << fhl << ": NR init R=" << fhr <<"\n";
-//              for (int n = 0; n < num_newton_iter; ++n) {
-//                Real aldpardp = fabs( (al - fhstar) * (ar - fhstar) );
-//                Real aral_aldpardp = 0.5 * (ar + al - 2*fhstar) / SQR(aldpardp);
-//                Real bmag_guess = std::sqrt( bxsq + a_full/aldpardp );
-//                // Function to minimize, divided by its derivative
-//                Real f0 = (frhou_fmx_bx + muhll*bmag_guess - bxsq*fhstar + 0.5*a_full/aldpardp);
-//                Real delta_dp =  -f0 /
-//                      (-bxsq + 0.5*a_full*bxsq*aral_aldpardp + a_full*muhll*aral_aldpardp/bmag_guess);
-//                fhstar += delta_dp;
-//    //            std::cout << n << " f0="<< f0 <<", dp=" << delta_dp << ": ";
-//              }
-//    //          std::cout << "\nNR final " << fhstar << "\n";
-//            }
-//          } else { // Need a special case for small Bx --
-//            // solve from ehll = pprp + pprl/2 + B^2/2 + rho*v^2/2
-//            Real slul = spd[0] - wli[IVX], srur = spd[4] - wri[IVX];
-//            Real slus = spd[0] - ustar, srus = spd[4] - ustar;
-//            // Estimate B^2 and rho u^2 from geometric averages
-//            Real bsq_star = std::sqrt(bsql * bsqr) * fabs(slul*srur/slus/srus);
-//            Real ke_star = 0.5*dhll*(SQR(ustar) + std::sqrt( (SQR(wli[IVY]) + SQR(wli[IVZ]))*
-//                                                        (SQR(wri[IVY]) + SQR(wri[IVZ])) ) );
-//            fhstar = 1 - 2./bsq_star*(ehll - 1.5*muhll*std::sqrt(bsq_star) -
-//                                  0.5*bsq_star - ke_star);
-//          }
-          //--- Step 4.9  Compute S*_L and S*_R, Alfven discontinuity speeds
-//          std::cout << i <<":"<< std::sqrt(fhstar) << ", " ;
-          Real sqrt_fhstar = fhstar > 0.0 ? std::sqrt(fhstar) : 0.0;
-          spd[1] = ustar - fabs(bxi)*sqrt_fhstar/sqrtdhll;
-          spd[3] = ustar + fabs(bxi)*sqrt_fhstar/sqrtdhll;
-          
-          //--- Step 5. Compute intermediate states
-          
-          // Ul* - eqn. (20) of Mignone
-          ulst.d  = dhll;
-          ulst.mx = mxhll; // eqn. (24) of Mignone
-          ulst.e  = ehll;
-          ulst.mu = muhll;
-          
-          Real csmean = 0.5*(cfl+cfr);
-          Real tmp = (spd[0]-spd[1])*(spd[0]-spd[3]);
-          if (fabs(spd[0]-spd[1]) < (SMALL_NUMBER)*csmean) {
-            // degenerate case described below eqn. (39)
-            ulst.my = ul.my;
-            ulst.mz = ul.mz;
-            ulst.by = ul.by;
-            ulst.bz = ul.bz;
-          } else {
-            Real mfact = bxi*(ustar*fhl - wli[IVX]*fhstar + spd[0]*(fhstar-fhl))/tmp;
-            Real bfact = (ul.d*SQR(spd[0]-wli[IVX]) - bxsq*fhl)/(dhll*tmp);
-            
-            ulst.my = dhll*wli[IVY] - ul.by*mfact; // eqn. (30) of Mignone
-            ulst.mz = dhll*wli[IVZ] - ul.bz*mfact; // eqn. (31) of Mignone
-            ulst.by = ul.by*bfact; // eqn. (32) of Mignone
-            ulst.bz = ul.bz*bfact; // eqn. (33) of Mignone
-          }
-          //DELETE
-//          ulst.my = myhll; // eqn. (30) of Mignone
-//          ulst.mz = mzhll; // eqn. (31) of Mignone
-//          ulst.by = byhll; // eqn. (32) of Mignone
-//          ulst.bz = bzhll;
-          
-          // Ur* - eqn. (20) of Mignone */
-          urst.d  = dhll;
-          urst.mx = mxhll; // eqn. (24) of Mignone
-          urst.e  = ehll;
-          urst.mu = muhll;
-          
-          tmp = (spd[4]-spd[1])*(spd[4]-spd[3]);
-          if (fabs(spd[4]-spd[3]) < (SMALL_NUMBER)*csmean) {
-            // degenerate case described below eqn. (39)
-            urst.my = ur.my;
-            urst.mz = ur.mz;
-            urst.by = ur.by;
-            urst.bz = ur.bz;
-          } else {
-            Real mfact = bxi*(ustar*fhr - wri[IVX]*fhstar + spd[4]*(fhstar-fhr))/tmp;
-            Real bfact = (ur.d*SQR(spd[4]-wri[IVX]) - bxsq*fhr)/(dhll*tmp);
-            
-            urst.my = dhll*wri[IVY] - ur.by*mfact; // eqn. (30) of Mignone
-            urst.mz = dhll*wri[IVZ] - ur.bz*mfact; // eqn. (31) of Mignone
-            urst.by = ur.by*bfact; // eqn. (32) of Mignone
-            urst.bz = ur.bz*bfact; // eqn. (33) of Mignone
-          }
-          //DELETE
-//          urst.my = myhll; // eqn. (30) of Mignone
-//          urst.mz = mzhll; // eqn. (31) of Mignone
-//          urst.by = byhll; // eqn. (32) of Mignone
-//          urst.bz = bzhll;
-          
-          // Uc*
-          Real x = sqrt_fhstar*sqrtdhll*(bxi > 0.0 ? 1.0 : -1.0); // from below eqn. (37) of Mignone
-          ucst.d  = dhll;  // eqn. (20) of Mignone
-          ucst.mx = mxhll; // eqn. (24) of Mignone
-          ucst.e  = ehll;
-          ucst.mu = muhll;
-          ucst.my = 0.5*(ulst.my + urst.my + (urst.by-ulst.by)*x); // eqn. (34) of Mignone
-          ucst.mz = 0.5*(ulst.mz + urst.mz + (urst.bz-ulst.bz)*x); // eqn. (35) of Mignone
-          ucst.by = 0.5*(ulst.by + urst.by + (urst.my-ulst.my)/x); // eqn. (36) of Mignone
-          ucst.bz = 0.5*(ulst.bz + urst.bz + (urst.mz-ulst.mz)/x); // eqn. (37) of Mignone
+                        (fhll.d*ustar + myhll*myhll/dhll + mzhll*mzhll/dhll);
+        Real fhstar = 1. + dphll / bsqhll; // Initial guess
+//          // another option is to compute from mx flux (effectively like isothermal version)
+//          Real fhstar = (-fhll.mx + fhll.d*ustar + pphll + 0.5*bsqhll)/bxsq;
 
-          //DELETE
-          // Compute u,v,by,bz HLL fluxes
-          Real fmyhll = (spd[4]*fl.my - spd[0]*fr.my + spd[4]*spd[0]*(ur.my-ul.my))*idspd;
-          Real fmzhll = (spd[4]*fl.mz - spd[0]*fr.mz + spd[4]*spd[0]*(ur.mz-ul.mz))*idspd;
-          Real fbyhll = (spd[4]*fl.by - spd[0]*fr.by + spd[4]*spd[0]*(ur.by-ul.by))*idspd;
-          Real fbzhll = (spd[4]*fl.bz - spd[0]*fr.bz + spd[4]*spd[0]*(ur.bz-ul.bz))*idspd;
+        //--- Step 4.9  Compute S*_L and S*_R, Alfven discontinuity speeds
+        Real sqrt_fhstar = fhstar > 0.0 ? std::sqrt(fhstar) : 0.0;
+        spd[1] = ustar - fabs(bxi)*sqrt_fhstar/sqrtdhll;
+        spd[3] = ustar + fabs(bxi)*sqrt_fhstar/sqrtdhll;
+        
+        //--- Step 5. Compute left and right star states for my,mz,by,bz
+        Real csmean = 0.5*(cfl+cfr);
+        Real tmp = (spd[0]-spd[1])*(spd[0]-spd[3]);
+        if (fabs(spd[0]-spd[1]) < (SMALL_NUMBER)*csmean) {
+          // degenerate case described below eqn. (39)
+          ulst.my = ul.my;
+          ulst.mz = ul.mz;
+          ulst.by = ul.by;
+          ulst.bz = ul.bz;
+        } else {
+          Real mfact = bxi*(ustar*fhl - wli[IVX]*fhstar + spd[0]*(fhstar-fhl))/tmp;
+          Real bfact = (ul.d*SQR(spd[0]-wli[IVX]) - bxsq*fhl)/(dhll*tmp);
           
-//          if (j==6 && k==6)
-//            std::cout << "bsqhll="<< bsqhll-bxsq <<", bsl="<< SQR(ulst.by)+SQR(ulst.bz) <<", bsr="<< SQR(urst.by)+SQR(urst.bz) << " -- ";
-          
-          
-          //--- Step 6.  Compute flux
-          
-          if (spd[0] >= 0.0) {
-//            std::cout << "f-2,"<<ivx<<" - ";
-            // return Fl if flow is supersonic, eqn. (38a) of Mignone
-            flxi[IDN] = fl.d;
-            flxi[IVX] = fl.mx;
-            flxi[IVY] = fl.my;
-            flxi[IVZ] = fl.mz;
-            flxi[IPR] = fl.e;
-            flxi[IPP] = fl.mu;
-            flxi[IBY] = fl.by;
-            flxi[IBZ] = fl.bz;
-          } else if (spd[4] <= 0.0) {
-//            std::cout << "f2,"<<ivx<<" - ";
-            // return Fr if flow is supersonic, eqn. (38e) of Mignone
-            flxi[IDN] = fr.d;
-            flxi[IVX] = fr.mx;
-            flxi[IVY] = fr.my;
-            flxi[IVZ] = fr.mz;
-            flxi[IPR] = fr.e;
-            flxi[IPP] = fr.mu;
-            flxi[IBY] = fr.by;
-            flxi[IBZ] = fr.bz;
-          } else if (spd[1] >= 0.0) {
-//            std::cout << "f-1,"<<ivx<<" - ";
-            // return (Fl+Sl*(Ulst-Ul)), eqn. (38b) of Mignone
-            flxi[IDN] = fl.d  + spd[0]*(ulst.d  - ul.d);
-            flxi[IVX] = fl.mx + spd[0]*(ulst.mx - ul.mx);
-            flxi[IVY] = fl.my + spd[0]*(ulst.my - ul.my);
-            flxi[IVZ] = fl.mz + spd[0]*(ulst.mz - ul.mz);
-            flxi[IPR] = fl.e  + spd[0]*(ulst.e  - ul.e);
-            flxi[IPP] = fr.mu + spd[0]*(ulst.mu - ul.mu);
-            flxi[IBY] = fl.by + spd[0]*(ulst.by - ul.by);
-            flxi[IBZ] = fl.bz + spd[0]*(ulst.bz - ul.bz);
-          } else if (spd[3] <= 0.0) {
-//            std::cout << "f1,"<<ivx<<" - ";
-            // return (Fr+Sr*(Urst-Ur)), eqn. (38d) of Mignone
-            flxi[IDN] = fr.d  + spd[4]*(urst.d  - ur.d);
-            flxi[IVX] = fr.mx + spd[4]*(urst.mx - ur.mx);
-            flxi[IVY] = fr.my + spd[4]*(urst.my - ur.my);
-            flxi[IVZ] = fr.mz + spd[4]*(urst.mz - ur.mz);
-            flxi[IPR] = fr.e  + spd[4]*(urst.e  - ur.e);
-            flxi[IPP] = fr.mu + spd[4]*(urst.mu - ur.mu);
-            flxi[IBY] = fr.by + spd[4]*(urst.by - ur.by);
-            flxi[IBZ] = fr.bz + spd[4]*(urst.bz - ur.bz);
-          } else {
-//            std::cout << "f0,"<<ivx<<" - ";
-            // return Fcst, eqn. (38c) of Mignone, using eqn. (24)
-            flxi[IDN] = fdhll;
-            flxi[IVX] = fmxhll;
-            flxi[IVY] = ucst.my*ustar - bxi*ucst.by*fhstar;//fmyhll;//
-            flxi[IVZ] = ucst.mz*ustar - bxi*ucst.bz*fhstar; //fmzhll;//
-            flxi[IPR] = fehll;
-            flxi[IPP] = fmuhll;
-            flxi[IBY] = ucst.by*ustar - bxi*ucst.my/ucst.d; //fbyhll;//
-            flxi[IBZ] = ucst.bz*ustar - bxi*ucst.mz/ucst.d;//  fbzhll;//
-          }
-        } else { // ( !((fhl < fh_floor) || (fhr < fh_floor)) )
-          // If 1 + ∆p/B^2 ~< 0, the Alfven wave  is non-propagating/unstable.
-          // ---  Use HLLE solver ---
-          
-          // Compute u,v,by,bz HLL fluxes
-          Real fmyhll = (spd[4]*fl.my - spd[0]*fr.my + spd[4]*spd[0]*(ur.my-ul.my))*idspd;
-          Real fmzhll = (spd[4]*fl.mz - spd[0]*fr.mz + spd[4]*spd[0]*(ur.mz-ul.mz))*idspd;
-          Real fbyhll = (spd[4]*fl.by - spd[0]*fr.by + spd[4]*spd[0]*(ur.by-ul.by))*idspd;
-          Real fbzhll = (spd[4]*fl.bz - spd[0]*fr.bz + spd[4]*spd[0]*(ur.bz-ul.bz))*idspd;
-          
-          //--- Step 6.  Compute flux
-          if (spd[0] >= 0.0) {
-            // return Fl if flow is supersonic, eqn. (38a) of Mignone
-            flxi[IDN] = fl.d;
-            flxi[IVX] = fl.mx;
-            flxi[IVY] = fl.my;
-            flxi[IVZ] = fl.mz;
-            flxi[IPR] = fl.e;
-            flxi[IPP] = fl.mu;
-            flxi[IBY] = fl.by;
-            flxi[IBZ] = fl.bz;
-          } else if (spd[4] <= 0.0) {
-            // return Fr if flow is supersonic, eqn. (38e) of Mignone
-            flxi[IDN] = fr.d;
-            flxi[IVX] = fr.mx;
-            flxi[IVY] = fr.my;
-            flxi[IVZ] = fr.mz;
-            flxi[IPR] = fr.e;
-            flxi[IPP] = fr.mu;
-            flxi[IBY] = fr.by;
-            flxi[IBZ] = fr.bz;
-          } else {
-            // HLLE fluxes for all variables
-            flxi[IDN] = fdhll;
-            flxi[IVX] = fmxhll;
-            flxi[IVY] = fmyhll;
-            flxi[IVZ] = fmzhll;
-            flxi[IPR] = fehll;
-            flxi[IPP] = fmuhll;
-            flxi[IBY] = fbyhll;
-            flxi[IBZ] = fbzhll;
-          }
+          ulst.my = dhll*wli[IVY] - ul.by*mfact; // eqn. (30) of Mignone
+          ulst.mz = dhll*wli[IVZ] - ul.bz*mfact; // eqn. (31) of Mignone
+          ulst.by = ul.by*bfact; // eqn. (32) of Mignone
+          ulst.bz = ul.bz*bfact; // eqn. (33) of Mignone
         }
         
+        tmp = (spd[4]-spd[1])*(spd[4]-spd[3]);
+        if (fabs(spd[4]-spd[3]) < (SMALL_NUMBER)*csmean) {
+          // degenerate case described below eqn. (39)
+          urst.my = ur.my;
+          urst.mz = ur.mz;
+          urst.by = ur.by;
+          urst.bz = ur.bz;
+        } else {
+          Real mfact = bxi*(ustar*fhr - wri[IVX]*fhstar + spd[4]*(fhstar-fhr))/tmp;
+          Real bfact = (ur.d*SQR(spd[4]-wri[IVX]) - bxsq*fhr)/(dhll*tmp);
+          
+          urst.my = dhll*wri[IVY] - ur.by*mfact; // eqn. (30) of Mignone
+          urst.mz = dhll*wri[IVZ] - ur.bz*mfact; // eqn. (31) of Mignone
+          urst.by = ur.by*bfact; // eqn. (32) of Mignone
+          urst.bz = ur.bz*bfact; // eqn. (33) of Mignone
+        }
+        
+        //--- Step 6. Compute compute fluxes in L,R star regions.
+        // We do this even if we want the central flux, because FsL and FsR used to
+        // compute Fsc
+        
+        //--- Step 6.1 Compute "Anti-Diffusive Control" (Simon & Mandell 2018).
+        // Our solver is more HLLE-like if ∆p/B2 becomes oscillatory, or ∆p/B^2~-1.
+        Real bsqltmp, bsqrtmp, ddpm1, ddpp1;
+        if (ivx==IVX) {
+          // Compute nearby variation of Dp/B^2
+          bsqltmp = SQR(bx(k,j,i-1)) + SQR(wl(IBY,k,j,i-1)) + SQR(wl(IBZ,k,j,i-1));
+          bsqrtmp = SQR(bx(k,j,i-1)) + SQR(wr(IBY,k,j,i-1)) + SQR(wr(IBZ,k,j,i-1));
+          ddpm1 = (wl(IPP,k,j,i-1) - wl(IPR,k,j,i-1))/bsqltmp -
+                  (wr(IPP,k,j,i-1) - wr(IPR,k,j,i-1))/bsqrtmp;
+          
+          bsqltmp = SQR(bx(k,j,i+1)) + SQR(wl(IBY,k,j,i+1)) + SQR(wl(IBZ,k,j,i+1));
+          bsqrtmp = SQR(bx(k,j,i+1)) + SQR(wr(IBY,k,j,i+1)) + SQR(wr(IBZ,k,j,i+1));
+          ddpp1 = (wl(IPP,k,j,i+1) - wl(IPR,k,j,i+1))/bsqltmp -
+                  (wr(IPP,k,j,i+1) - wr(IPR,k,j,i+1))/bsqrtmp;
+        } else if (ivx==IVY) {
+          // Compute nearby variation of Dp/B^2
+          bsqltmp = SQR(bx(k,j-1,i)) + SQR(wl(IBY,k,j-1,i)) + SQR(wl(IBZ,k,j-1,i));
+          bsqrtmp = SQR(bx(k,j-1,i)) + SQR(wr(IBY,k,j-1,i)) + SQR(wr(IBZ,k,j-1,i));
+          ddpm1 = (wl(IPP,k,j-1,i) - wl(IPR,k,j-1,i))/bsqltmp -
+                  (wr(IPP,k,j-1,i) - wr(IPR,k,j-1,i))/bsqrtmp;
+          
+          bsqltmp = SQR(bx(k,j+1,i)) + SQR(wl(IBY,k,j+1,i)) + SQR(wl(IBZ,k,j+1,i));
+          bsqrtmp = SQR(bx(k,j+1,i)) + SQR(wr(IBY,k,j+1,i)) + SQR(wr(IBZ,k,j+1,i));
+          ddpp1 = (wl(IPP,k,j+1,i) - wl(IPR,k,j+1,i))/bsqltmp -
+                  (wr(IPP,k,j+1,i) - wr(IPR,k,j+1,i))/bsqrtmp;
+        } else if (ivx==IVZ) {
+          // Compute nearby variation of Dp/B^2
+          bsqltmp = SQR(bx(k-1,j,i)) + SQR(wl(IBY,k-1,j,i)) + SQR(wl(IBZ,k-1,j,i));
+          bsqrtmp = SQR(bx(k-1,j,i)) + SQR(wr(IBY,k-1,j,i)) + SQR(wr(IBZ,k-1,j,i));
+          ddpm1 = (wl(IPP,k-1,j,i) - wl(IPR,k-1,j,i))/bsqltmp -
+                  (wr(IPP,k-1,j,i) - wr(IPR,k-1,j,i))/bsqrtmp;
+          
+          bsqltmp = SQR(bx(k+1,j,i)) + SQR(wl(IBY,k+1,j,i)) + SQR(wl(IBZ,k+1,j,i));
+          bsqrtmp = SQR(bx(k+1,j,i)) + SQR(wr(IBY,k+1,j,i)) + SQR(wr(IBZ,k+1,j,i));
+          ddpp1 = (wl(IPP,k+1,j,i) - wl(IPR,k+1,j,i))/bsqltmp -
+                  (wr(IPP,k+1,j,i) - wr(IPR,k+1,j,i))/bsqrtmp;
+        }
+        // Switch to HLLE if fh becomes oscillatory
+        Real ddp = std::max(fabs(fhl-fhr), fabs(ddpm1));
+        ddp = std::max(ddp, fabs(ddpp1));
+        // Switch to HLLE for fh close to zero
+        Real smallfh_limit = (fhstar < fh_floor) ? 0. : fhstar;
+        // If omega~0, it's HLLE, if omega~1 it's HLLD
+        Real omega = std::exp(-anti_diff_alpha*ddp) * smallfh_limit;
+        
+        //--- Step 6.2 Compute star region fluxes of my,mz,by,bz
+        // Left-hand star region fluxes
+        Real flstmy = fhll.my + omega*spd[0]*(ulst.my - myhll);
+        Real flstmz = fhll.mz + omega*spd[0]*(ulst.mz - mzhll);
+        Real flstby = fhll.by + omega*spd[0]*(ulst.by - byhll);
+        Real flstbz = fhll.bz + omega*spd[0]*(ulst.bz - bzhll);
+        // Right-hand star region fluxes
+        Real frstmy = fhll.my + omega*spd[4]*(urst.my - myhll);
+        Real frstmz = fhll.mz + omega*spd[4]*(urst.mz - mzhll);
+        Real frstby = fhll.by + omega*spd[4]*(urst.by - byhll);
+        Real frstbz = fhll.bz + omega*spd[4]*(urst.bz - bzhll);
+        
+        //--- Step 7.  Compute flux
+          
+        if (spd[0] >= 0.0) {
+          // return Fl if flow is supersonic, eqn. (38a) of Mignone
+          flxi[IDN] = fl.d;
+          flxi[IVX] = fl.mx;
+          flxi[IVY] = fl.my;
+          flxi[IVZ] = fl.mz;
+          flxi[IPR] = fl.e;
+          flxi[IPP] = fl.mu;
+          flxi[IBY] = fl.by;
+          flxi[IBZ] = fl.bz;
+        } else if (spd[4] <= 0.0) {
+          // return Fr if flow is supersonic, eqn. (38e) of Mignone
+          flxi[IDN] = fr.d;
+          flxi[IVX] = fr.mx;
+          flxi[IVY] = fr.my;
+          flxi[IVZ] = fr.mz;
+          flxi[IPR] = fr.e;
+          flxi[IPP] = fr.mu;
+          flxi[IBY] = fr.by;
+          flxi[IBZ] = fr.bz;
+        } else if (spd[1] >= 0.0) {
+          // return (Fl+Sl*(Ulst-Ul))=Fhll+SL(ULst-Uhll), eqn. (38b) of Mignone
+          flxi[IDN] = fhll.d;
+          flxi[IVX] = fhll.mx;
+          flxi[IVY] = flstmy;
+          flxi[IVZ] = flstmz;
+          flxi[IPR] = fhll.e ;
+          flxi[IPP] = fhll.mu;
+          flxi[IBY] = flstby;
+          flxi[IBZ] = flstbz;
+        } else if (spd[3] <= 0.0) {
+          // return (Fr+Sr*(Urst-Ur))=Fhll+SR*(URst-Uhll), eqn. (38d) of Mignone
+          flxi[IDN] = fhll.d;
+          flxi[IVX] = fhll.mx;
+          flxi[IVY] = frstmy;
+          flxi[IVZ] = frstmz;
+          flxi[IPR] = fhll.e ;
+          flxi[IPP] = fhll.mu;
+          flxi[IBY] = frstby;
+          flxi[IBZ] = frstbz;
+        } else {
+          Real isrsl = 1.0/(spd[3]-spd[1]);
+          Real srtsl = spd[3]*spd[1];
+          // return Fcst, but compute directly from consistency, eqn. (16) of Mignone
+          flxi[IDN] = fhll.d;
+          flxi[IVX] = fhll.mx;
+          flxi[IVY] = (spd[3]*flstmy - spd[1]*frstmy + srtsl*(urst.my-ulst.my) )*isrsl;
+          flxi[IVZ] = (spd[3]*flstmz - spd[1]*frstmz + srtsl*(urst.mz-ulst.mz) )*isrsl;
+          flxi[IPR] = fhll.e;
+          flxi[IPP] = fhll.mu;
+          flxi[IBY] = (spd[3]*flstby - spd[1]*frstby + srtsl*(urst.by-ulst.by) )*isrsl;
+          flxi[IBZ] = (spd[3]*flstbz - spd[1]*frstbz + srtsl*(urst.bz-ulst.bz) )*isrsl;
+        }
+
         flx(IDN,k,j,i) = flxi[IDN];
         flx(ivx,k,j,i) = flxi[IVX];
         flx(ivy,k,j,i) = flxi[IVY];
@@ -432,7 +355,7 @@ void Hydro::RiemannSolver(const int kl, const int ku, const int jl, const int ju
         flx(IPP,k,j,i) = flxi[IPP];
         ey(k,j,i) = -flxi[IBY];
         ez(k,j,i) =  flxi[IBZ];
-        
+
       }
     }}
 //  std::cout <<"\n\n";

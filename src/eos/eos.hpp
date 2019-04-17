@@ -103,7 +103,8 @@ public:
     void Collisions(AthenaArray<Real> &, const AthenaArray<Real> &, const AthenaArray<Real> &,
                     Real, int, int, int, int, int, int){return;};
   #else // CGL
-    void Collisions(AthenaArray<Real> &prim, const AthenaArray<Real> &prim_old, const AthenaArray<Real> &bc,
+    void Collisions(AthenaArray<Real> &prim, const AthenaArray<Real> &prim_old,
+                    const AthenaArray<Real> &bc,
                   Real dt, int il, int iu, int jl, int ju, int kl, int ku);
   #endif //!CGL_EOS
 
@@ -114,13 +115,15 @@ public:
   Real GetBFieldFloor() const {return magnetic_mag_floor_;}
   Real GetCollisionFreq() const {return collision_freq_;}
   Real GetFHFloor() const {return fh_hlld_floor_;}
+  Real GetAntiDiffAlpha() const {return anti_diff_alpha_;}
 
 private:
   MeshBlock *pmy_block_;                   // ptr to MeshBlock containing this EOS
   Real iso_sound_speed_, gamma_;           // isothermal Cs, ratio of specific heats
   Real density_floor_, pressure_floor_;    // density and pressure floors
   Real magnetic_mag_floor_;                // Magnetic field strength floor
-  Real fh_hlld_floor_;                     // Limit of 1+∆p/B^2 to switch to HLLE solver
+  Real fh_hlld_floor_;                     // Limit of 1+∆p/B^2 to interpolate to HLLE in CGL solver
+  Real anti_diff_alpha_;                   // Alpha value to interpolate to HLLE in CGL solver
   Real collision_freq_;                    // Collision frequency in CGL
   Real limiting_collision_freq_;           // Collision freq. used in firehose/mirror limiters
   int firehose_limiter_, mirror_limiter_; // Mirror/firehose limiter on delta_p

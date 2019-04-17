@@ -25,12 +25,14 @@
 
 EquationOfState::EquationOfState(MeshBlock *pmb, ParameterInput *pin) {
   pmy_block_ = pmb;
-//  gamma_ = pin->GetReal("hydro", "gamma");
+  gamma_ = pin->GetReal("hydro", "gamma");
   density_floor_  = pin->GetOrAddReal("hydro", "dfloor", std::sqrt(1024*(FLT_MIN)));
   pressure_floor_ = pin->GetOrAddReal("hydro", "pfloor", std::sqrt(1024*(FLT_MIN)));
   magnetic_mag_floor_ = pin->GetOrAddReal("hydro", "bmagfloor", std::sqrt(1024*(FLT_MIN)));
-  fh_hlld_floor_ = pin->GetOrAddReal("hydro", "fh_hlld_floor", 0.2);
-  // Collisions and limiters
+  // Parameters for CGL Reimann sovler
+  fh_hlld_floor_ = pin->GetOrAddReal("hydro", "fh_hlld_floor", 0.1);
+  anti_diff_alpha_ = pin->GetOrAddReal("hydro", "anti_diff_alpha", 20.);
+  // Collisions and limiters in CGL
   collision_freq_ = pin->GetOrAddReal("problem", "nu_coll", 0.0);
   firehose_limiter_ = pin->GetOrAddInteger("problem", "firehose_limiter", 0);
   mirror_limiter_ = pin->GetOrAddInteger("problem", "mirror_limiter", 0);

@@ -58,13 +58,6 @@ TimeIntegratorTaskList::TimeIntegratorTaskList(ParameterInput *pin, Mesh *pm)
   int dim = 1;
   if (pm->mesh_size.nx2 > 1) dim = 2;
   if (pm->mesh_size.nx3 > 1) dim = 3;
-    
-  if (CGL_EOS && !(integrator == "rk2" || integrator == "vl2")) {
-    std::cout << "### WARNING in CreateTimeIntegrator" << std::endl
-      << "integrator=" << integrator << " may not be compatible with collisions, "
-      << "setting to vl2" << std::endl;
-    integrator = "vl2";
-  }
 
   if (integrator == "vl2") {
     // VL: second-order van Leer integrator (Stone & Gardiner, NewA 14, 139 2009)

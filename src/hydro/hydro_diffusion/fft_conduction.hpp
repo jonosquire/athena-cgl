@@ -58,7 +58,7 @@ private:
   HydroDiffusion *pmy_hdif_;
 
   Real xsize_;
-  Real nx1_, nx2_,nx3_, ntot_;
+  int nx1_, nx2_,nx3_, ntot_;
   int nft_, howmany_; // Size of Fourier transform. How many of them
   int stride_, dist_; // Stride and distance between ffts (see fftw)
   // Plans

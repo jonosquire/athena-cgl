@@ -204,7 +204,6 @@ HydroDiffusion::~HydroDiffusion() {
     cndflx[X3DIR].DeleteAthenaArray();
     dprl_cond.DeleteAthenaArray();
     bmagcc_.DeleteAthenaArray();
-    delete [] bhat_mean_;
     if (using_fft_for_conduction) delete pfcondd;
   }
   if (hydro_diffusion_defined) {
